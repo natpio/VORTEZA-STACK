@@ -6,36 +6,12 @@ import base64
 from PIL import Image
 
 # =========================================================
-# KONFIGURACJA STRONY I STYLIZACJA (Styl z app2)
+# KONFIGURACJA STRONY I STYLIZACJA (Styl Vorteza)
 # =========================================================
 st.set_page_config(page_title="VORTEZA CARGO | SQM", layout="wide", page_icon="🚚")
 
-def get_base64_of_bin_file(bin_file):
-    try:
-        with open(bin_file, 'rb') as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except:
-        return ""
-
 def apply_vorteza_theme():
-    # Próba załadowania tła z app2
-    bin_str = get_base64_of_bin_file('bg_vorteza.png')
-    if bin_str:
-        bg_style = f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{bin_str}");
-            background-size: cover;
-            background-attachment: fixed;
-        }}
-        </style>
-        """
-        st.markdown(bg_style, unsafe_allow_html=True)
-    else:
-        st.markdown("<style>.stApp { background-color: #0E0E0E; }</style>", unsafe_allow_html=True)
-
-    # Implementacja stylów CSS z app2 [cite: 237, 238, 240, 243, 248, 249]
+    # Stylizacja CSS identyczna z app2
     st.markdown("""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;700&display=swap');
@@ -43,269 +19,266 @@ def apply_vorteza_theme():
             :root {
                 --v-copper: #B58863;
                 --v-dark: #0E0E0E;
-                --v-panel: rgba(20, 20, 20, 0.9);
+                --v-panel: rgba(20, 20, 20, 0.85);
                 --v-text: #E0E0E0;
             }
 
             .stApp {
+                background-color: var(--v-dark);
                 color: var(--v-text);
                 font-family: 'Montserrat', sans-serif;
             }
 
+            /* Nagłówki */
             h1, h2, h3, .stSubheader {
                 color: var(--v-copper) !important;
                 font-weight: 700 !important;
                 text-transform: uppercase;
                 letter-spacing: 2px;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            }
+
+            /* Karty / Panele */
+            .vorteza-card {
+                background-color: var(--v-panel);
+                padding: 25px;
+                border-radius: 4px;
+                border-left: 4px solid var(--v-copper);
+                backdrop-filter: blur(10px);
+                margin-bottom: 20px;
+                border-top: 1px solid rgba(181, 136, 99, 0.1);
+            }
+
+            /* Inputy i Selektory */
+            div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, input {
+                background-color: rgba(30, 30, 30, 0.9) !important;
+                border: 1px solid #333 !important;
+                color: white !important;
             }
 
             label[data-testid="stWidgetLabel"] {
                 color: var(--v-copper) !important;
-                font-weight: 700 !important;
                 text-transform: uppercase;
-                font-size: 0.85rem !important;
-                letter-spacing: 1px;
+                font-size: 0.8rem !important;
+                font-weight: 600 !important;
             }
 
-            div[data-baseweb="select"] > div, input {
-                background-color: rgba(15, 15, 15, 0.9) !important;
-                color: white !important;
-                border: 1px solid #444 !important;
-            }
-            
-            .vorteza-card {
-                background-color: var(--v-panel);
-                padding: 30px;
-                border-radius: 5px;
-                border-left: 5px solid var(--v-copper);
-                box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-                backdrop-filter: blur(15px);
-                margin-bottom: 20px;
-            }
-
+            /* Przyciski */
             .stButton > button {
-                background-color: rgba(0, 0, 0, 0.7);
+                background-color: transparent;
                 color: var(--v-copper);
                 border: 1px solid var(--v-copper);
-                padding: 15px;
                 width: 100%;
                 font-weight: 700;
                 text-transform: uppercase;
-                transition: 0.3s;
+                letter-spacing: 1px;
+                transition: 0.4s;
             }
             .stButton > button:hover {
                 background-color: var(--v-copper);
                 color: black;
+                border: 1px solid var(--v-copper);
             }
 
-            /* Stylizacja tabeli wyników */
-            .result-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 15px;
-            }
-            .result-table td {
-                padding: 10px;
-                border-bottom: 1px solid #222;
+            /* Tabela wyników */
+            .metric-box {
+                text-align: center;
+                padding: 15px;
+                border: 1px solid #333;
+                background: rgba(255,255,255,0.03);
             }
         </style>
     """, unsafe_allow_html=True)
 
 # =========================================================
-# SYSTEM LOGOWANIA (Styl z app2)
+# SYSTEM LOGOWANIA
 # =========================================================
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
-        col1, col2, col3 = st.columns([1, 2, 1])
+        col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
-            st.markdown("<br><br>", unsafe_allow_html=True)
-            with st.form("Login"):
-                st.markdown("### VORTEZA | CARGO ACCESS")
-                pwd = st.text_input("Hasło dostępowe:", type="password")
-                submit = st.form_submit_button("ZALOGUJ")
-                if submit:
-                    if pwd == "NowyRozdzial": [cite: 152]
-                        st.session_state["authenticated"] = True
-                        st.rerun()
-                    else:
-                        st.error("❌ Błędne hasło")
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align:center;'>VORTEZA SYSTEMS</h2>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center; font-size:0.8rem;'>CARGO LOGISTICS GATEWAY</p>", unsafe_allow_html=True)
+            pwd = st.text_input("PASSWORD:", type="password")
+            if st.button("AUTHORIZE ACCESS"):
+                if pwd == "NowyRozdzial":
+                    st.session_state["authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error("ACCESS DENIED")
+            st.markdown('</div>', unsafe_allow_html=True)
         return False
     return True
 
-# --- GŁÓWNA LOGIKA ---
+# --- INICJALIZACJA ---
 apply_vorteza_theme()
 
 if check_password():
-    # Nagłówek aplikacji (Styl z app2)
-    col_logo, col_title, col_logout = st.columns([1, 4, 1])
-    with col_logo:
-        try:
-            logo = Image.open('logo_vorteza.png')
-            st.image(logo, use_container_width=True)
-        except:
-            st.title("VORTEZA")
-
-    with col_title:
-        st.markdown("<br>", unsafe_allow_html=True)
+    # Nagłówek górny
+    c1, c2 = st.columns([3, 1])
+    with c1:
         st.title("CARGO PLANNER PRO 3D")
-    
-    with col_logout:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        if st.button("WYLOGUJ"):
+    with c2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("LOGOUT"):
             st.session_state["authenticated"] = False
             st.rerun()
 
-    # --- BAZA DANYCH (Niezmieniona z app1) ---
+    # --- BAZA DANYCH (Połączona) ---
     VEHICLES = {
         "FTL (Tir)": {"l": 1360, "w": 245, "h": 265, "weight": 12000, "pallets": 33},
         "Solówka 7m": {"l": 700, "w": 245, "h": 245, "weight": 3500, "pallets": 16},
         "Solówka 6m": {"l": 600, "w": 245, "h": 245, "weight": 3500, "pallets": 14},
-        "BUS": {"l": 450, "w": 150, "h": 245, "weight": 1100, "pallets": 8},
+        "BUS (10ep)": {"l": 485, "w": 220, "h": 245, "weight": 1100, "pallets": 10},
     }
 
-    # (Tu wstaw całą listę PRODUCTS z oryginału app1)
+    # Rozszerzona baza produktów z SQM
     PRODUCTS = {
-        "17-23\" - plastic case": {"l": 80, "w": 60, "h": 20, "weight": 20.0, "ipc": 1, "stack": True},
-        "24-32\" - plastic case": {"l": 60, "w": 40, "h": 20, "weight": 15.0, "ipc": 1, "stack": True},
-        # ... (Dalsza część bazy produktów)
-        "Własny ładunek": {"l": 120, "w": 80, "h": 100, "weight": 100.0, "ipc": 1, "stack": True},
+        "17-23\" - plastic case": {"l": 80, "w": 60, "h": 20, "weight": 20.0, "stack": True},
+        "24-32\" - plastic case": {"l": 60, "w": 40, "h": 20, "weight": 15.0, "stack": True},
+        "55\" TV - flightcase": {"l": 140, "w": 40, "h": 95, "weight": 65.0, "stack": False},
+        "75\" TV - flightcase": {"l": 185, "w": 45, "h": 120, "weight": 95.0, "stack": False},
+        "P6 LED Panel (Box)": {"l": 60, "w": 60, "h": 20, "weight": 12.0, "stack": True},
+        "P3 LED Panel (Case 6)": {"l": 110, "w": 65, "h": 85, "weight": 85.0, "stack": False},
+        "Truss 2m - Alu": {"l": 200, "w": 30, "h": 30, "weight": 15.0, "stack": True},
+        "Subwoofer 18\"": {"l": 70, "w": 80, "h": 60, "weight": 55.0, "stack": True},
+        "Europaleta (EPAL)": {"l": 120, "w": 80, "h": 150, "weight": 400.0, "stack": False},
+        "Custom Cargo": {"l": 100, "w": 100, "h": 100, "weight": 10.0, "stack": True},
     }
 
-    # --- FUNKCJA RYSOWANIA 3D ---
-    def add_box(fig, x, y, z, l, w, h, name, color):
-        gap = 0.5
-        l_g, w_g, h_g = l-gap, w-gap, h-gap
-        x_c = [x, x+l_g, x+l_g, x, x, x+l_g, x+l_g, x]
-        y_c = [y, y, y+w_g, y+w_g, y, y, y+w_g, y+w_g]
-        z_c = [z, z, z, z, z+h_g, z+h_g, z+h_g, z+h_g]
-        fig.add_trace(go.Mesh3d(
-            x=x_c, y=y_c, z=z_c,
-            i=[7,0,0,0,4,4,6,6,4,0,3,2], j=[3,4,1,2,5,6,5,2,0,1,6,3], k=[0,7,2,3,6,7,1,1,5,5,7,6],
-            color=color, opacity=0.9, flatshading=True, name=name, showlegend=False
-        ))
+    # --- LOGIKA APLIKACJI ---
+    left_col, right_col = st.columns([1, 2], gap="large")
 
-    # --- INTERFEJS PLANOWANIA ---
-    st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
-    col1, col2 = st.columns([1, 2], gap="large")
-
-    with col1:
-        st.subheader("Konfiguracja Transportu")
-        v_name = st.selectbox("Wybierz pojazd:", list(VEHICLES.keys()))
+    with left_col:
+        st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
+        st.subheader("Transport Settings")
+        v_name = st.selectbox("Vehicle Fleet:", list(VEHICLES.keys()))
         v = VEHICLES[v_name]
         
         st.markdown("---")
-        st.subheader("Dodaj ładunek")
-        selected_prod = st.selectbox("Produkt z bazy SQM:", list(PRODUCTS.keys()))
-        qty = st.number_input("Ilość (sztuk):", min_value=1, value=1)
-
+        st.subheader("Inventory Management")
+        prod_key = st.selectbox("Select SQM Item:", list(PRODUCTS.keys()))
+        qty = st.number_input("Quantity:", min_value=1, value=1)
+        
         if "cargo_list" not in st.session_state:
             st.session_state.cargo_list = []
 
-        if st.button("DODAJ DO LISTY"):
-            p = PRODUCTS[selected_prod]
+        if st.button("ADD TO MANIFEST"):
+            p = PRODUCTS[prod_key]
             st.session_state.cargo_list.append({
-                "name": selected_prod,
-                "l": p["l"], "w": p["w"], "h": p["h"],
+                "name": prod_key, "l": p["l"], "w": p["w"], "h": p["h"],
                 "weight": p["weight"], "stack": p["stack"], "qty": qty
             })
             st.rerun()
 
         if st.session_state.cargo_list:
-            if st.button("WYCZYŚĆ LISTĘ"):
+            if st.button("RESET MANIFEST"):
                 st.session_state.cargo_list = []
                 st.rerun()
-
-            st.markdown("### Aktualna lista:")
-            for idx, item in enumerate(st.session_state.cargo_list):
-                st.text(f"{idx+1}. {item['name']} x{item['qty']}")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    with col2:
-        if st.session_state.cargo_list:
-            st.subheader("Wizualizacja 3D i Wyniki")
             
-            # Algorytm pakowania (uproszczony z app1)
-            items_to_pack = []
+            st.markdown("**Current Manifest:**")
+            for i, item in enumerate(st.session_state.cargo_list):
+                st.caption(f"{i+1}. {item['name']} x{item['qty']}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with right_col:
+        if st.session_state.cargo_list:
+            # Uproszczony silnik pakowania 3D
+            all_items = []
             for entry in st.session_state.cargo_list:
                 for _ in range(entry['qty']):
-                    items_to_pack.append(entry)
+                    all_items.append(entry)
 
-            items_to_pack.sort(key=lambda x: x['l']*x['w'], reverse=True)
+            # Sortowanie dla lepszego wypełnienia
+            all_items.sort(key=lambda x: x['l']*x['w'], reverse=True)
 
             stacks = []
-            unplaced = []
-            total_w = 0
-
-            for item in items_to_pack:
+            total_weight = 0
+            
+            # Algorytm podłogowy (First Fit Decreasing)
+            for item in all_items:
                 placed = False
-                for s in stacks:
-                    if s['l'] == item['l'] and s['w'] == item['w'] and item['stack']:
-                        current_stack_h = sum(i['h'] for i in s['items'])
-                        if current_stack_h + item['h'] <= v['h'] and total_w + item['weight'] <= v['weight']:
-                            s['items'].append(item)
-                            total_w += item['weight']
-                            placed = True
-                            break
+                # Próba sztaplowania
+                if item['stack']:
+                    for s in stacks:
+                        current_h = sum(i['h'] for i in s['items'])
+                        if s['l'] >= item['l'] and s['w'] >= item['w'] and (current_h + item['h']) <= v['h']:
+                            if (total_weight + item['weight']) <= v['weight']:
+                                s['items'].append(item)
+                                total_weight += item['weight']
+                                placed = True
+                                break
                 
+                # Nowa pozycja na podłodze
                 if not placed:
                     for x in range(0, v['l'] - item['l'] + 1, 10):
                         for y in range(0, v['w'] - item['w'] + 1, 10):
-                            overlap = False
+                            collision = False
                             for s in stacks:
                                 if not (x + item['l'] <= s['x'] or x >= s['x'] + s['l'] or
                                         y + item['w'] <= s['y'] or y >= s['y'] + s['w']):
-                                    overlap = True
+                                    collision = True
                                     break
-                            if not overlap and total_w + item['weight'] <= v['weight']:
+                            if not collision and (total_weight + item['weight']) <= v['weight']:
                                 stacks.append({'x': x, 'y': y, 'l': item['l'], 'w': item['w'], 'items': [item]})
-                                total_w += item['weight']
+                                total_weight += item['weight']
                                 placed = True
                                 break
                         if placed: break
-                
-                if not placed:
-                    unplaced.append(item)
 
-            # Rysowanie (Plotly)
+            # Wizualizacja Plotly (Paleta Vorteza)
             fig = go.Figure()
-            # Obrys pojazdu
+            
+            # Obrys pojazdu (Miedziany szkielet)
             fig.add_trace(go.Scatter3d(
                 x=[0, v['l'], v['l'], 0, 0, 0, v['l'], v['l'], 0, 0],
                 y=[0, 0, v['w'], v['w'], 0, 0, 0, v['w'], v['w'], 0],
                 z=[0, 0, 0, 0, 0, v['h'], v['h'], v['h'], v['h'], v['h']],
-                mode='lines', line=dict(color='white', width=2), name='Pojazd'
+                mode='lines', line=dict(color='#B58863', width=3), name='Cargo Area'
             ))
 
-            colors = ['#B58863', '#8E6B4E', '#D4A373', '#6B4F36'] # Paleta miedzi
-            
-            for i, s in enumerate(stacks):
-                z_ptr = 0
+            def add_vorteza_box(fig, x, y, z, l, w, h, name):
+                fig.add_trace(go.Mesh3d(
+                    x=[x, x+l, x+l, x, x, x+l, x+l, x],
+                    y=[y, y, y+w, y+w, y, y, y+w, y+w],
+                    z=[z, z, z, z, z+h, z+h, z+h, z+h],
+                    i=[7,0,0,0,4,4,6,6,4,0,3,2], j=[3,4,1,2,5,6,5,2,0,1,6,3], k=[0,7,2,3,6,7,1,1,5,5,7,6],
+                    color='#B58863', opacity=0.7, flatshading=True, name=name
+                ))
+
+            for s in stacks:
+                z_off = 0
                 for item in s['items']:
-                    add_box(fig, s['x'], s['y'], z_ptr, s['l'], s['w'], item['h'], item['name'], colors[i % len(colors)])
-                    z_ptr += item['h']
+                    add_vorteza_box(fig, s['x'], s['y'], z_off, item['l'], item['w'], item['h'], item['name'])
+                    z_off += item['h']
 
             fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
                 scene=dict(
-                    xaxis=dict(gridcolor='#333', title='Długość (cm)'),
-                    yaxis=dict(gridcolor='#333', title='Szerokość (cm)'),
-                    zaxis=dict(gridcolor='#333', title='Wysokość (cm)'),
+                    xaxis=dict(gridcolor='#222', backgroundcolor='black'),
+                    yaxis=dict(gridcolor='#222', backgroundcolor='black'),
+                    zaxis=dict(gridcolor='#222', backgroundcolor='black'),
                     aspectmode='data'
                 ),
-                margin=dict(l=0, r=0, b=0, t=0),
-                height=600
+                paper_bgcolor='black',
+                margin=dict(l=0,r=0,b=0,t=0),
+                height=500
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Podsumowanie w stylu Vorteza
+            # Podsumowanie
             st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
             m1, m2, m3 = st.columns(3)
-            m1.metric("WYKORZYSTANA WAGA", f"{total_w} kg / {v['weight']} kg")
-            m2.metric("ZAJĘTE MIEJSCE", f"{len(stacks)} / {v['pallets']} palet")
-            m3.metric("NIEZMIESZCZONE", f"{len(unplaced)} szt.")
+            with m1:
+                st.metric("PAYLOAD LOADED", f"{total_weight} kg", f"{v['weight']-total_weight} kg left")
+            with m2:
+                st.metric("FLOOR OCCUPANCY", f"{len(stacks)} Pallets", f"{v['pallets']} max")
+            with m3:
+                util = round((total_weight/v['weight'])*100, 1)
+                st.metric("EFFICIENCY", f"{util}%")
             st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.info("Manifest is empty. Add items to visualize cargo placement.")
