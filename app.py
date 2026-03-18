@@ -55,7 +55,7 @@ def apply_vorteza_theme():
             :root {{ --v-copper: #B58863; --v-bg-panel: rgba(15, 15, 15, 0.98); }}
             {bg_style}
             
-            /* Poprawa widoczności sidebaru - ciemniejszy podkład pod tekstem */
+            /* Poprawa widoczności sidebaru */
             [data-testid="stSidebar"] {{ 
                 background-color: rgba(0, 0, 0, 0.85) !important; 
                 border-right: 2px solid var(--v-copper);
@@ -65,7 +65,6 @@ def apply_vorteza_theme():
             [data-testid="stHeader"], [data-testid="stMainBlockContainer"] {{ background-color: transparent !important; }}
             .stApp {{ color: #FFFFFF; font-family: 'Montserrat', sans-serif; }}
             
-            /* Napisy na sidebarze wymuszone na biało dla kontrastu */
             [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {{
                 color: #FFFFFF !important;
                 font-weight: 500;
@@ -130,9 +129,10 @@ def pack_logic(items, veh):
 
 def draw_3d(stacks, veh, color_map):
     fig = go.Figure()
+    # NAPRAWIONO: veh['w'] zamiast Corey_w
     fig.add_trace(go.Scatter3d(
         x=[0, veh['l'], veh['l'], 0, 0, 0, veh['l'], veh['l'], 0, 0],
-        y=[0, 0, veh['w'], veh['w'], 0, 0, 0, veh['w'], Corey_w, 0],
+        y=[0, 0, veh['w'], veh['w'], 0, 0, 0, veh['w'], veh['w'], 0],
         z=[0, 0, 0, 0, 0, veh['h'], veh['h'], veh['h'], veh['h'], veh['h']],
         mode='lines', line=dict(color='#B58863', width=4), name='Auto'
     ))
@@ -160,7 +160,6 @@ if "auth" not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
     _, col_login, _ = st.columns([0.5, 2, 0.5])
     with col_login:
-        # LOGO ZWIĘKSZONE NA 450px
         if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:450px;width:100%;margin-bottom:30px;">', unsafe_allow_html=True)
         st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
         st.subheader("VORTEZA LOGIN")
