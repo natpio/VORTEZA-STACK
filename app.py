@@ -54,9 +54,23 @@ def apply_vorteza_theme():
             @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;700&display=swap');
             :root {{ --v-copper: #B58863; --v-bg-panel: rgba(15, 15, 15, 0.98); }}
             {bg_style}
+            
+            /* Poprawa widoczności sidebaru - ciemniejszy podkład pod tekstem */
+            [data-testid="stSidebar"] {{ 
+                background-color: rgba(0, 0, 0, 0.85) !important; 
+                border-right: 2px solid var(--v-copper);
+                backdrop-filter: blur(10px);
+            }}
+            
             [data-testid="stHeader"], [data-testid="stMainBlockContainer"] {{ background-color: transparent !important; }}
             .stApp {{ color: #FFFFFF; font-family: 'Montserrat', sans-serif; }}
-            [data-testid="stSidebar"] {{ background-color: #000000 !important; border-right: 2px solid var(--v-copper); }}
+            
+            /* Napisy na sidebarze wymuszone na biało dla kontrastu */
+            [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {{
+                color: #FFFFFF !important;
+                font-weight: 500;
+            }}
+
             .vorteza-card {{
                 background: var(--v-bg-panel); padding: 25px; border-radius: 2px;
                 border: 1px solid rgba(181, 136, 99, 0.3); border-left: 8px solid var(--v-copper);
@@ -118,7 +132,7 @@ def draw_3d(stacks, veh, color_map):
     fig = go.Figure()
     fig.add_trace(go.Scatter3d(
         x=[0, veh['l'], veh['l'], 0, 0, 0, veh['l'], veh['l'], 0, 0],
-        y=[0, 0, veh['w'], veh['w'], 0, 0, 0, veh['w'], veh['w'], 0],
+        y=[0, 0, veh['w'], veh['w'], 0, 0, 0, veh['w'], Corey_w, 0],
         z=[0, 0, 0, 0, 0, veh['h'], veh['h'], veh['h'], veh['h'], veh['h']],
         mode='lines', line=dict(color='#B58863', width=4), name='Auto'
     ))
@@ -144,9 +158,10 @@ apply_vorteza_theme()
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    _, col_login, _ = st.columns([1, 1.2, 1])
+    _, col_login, _ = st.columns([0.5, 2, 0.5])
     with col_login:
-        if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:200px;margin-bottom:30px;">', unsafe_allow_html=True)
+        # LOGO ZWIĘKSZONE NA 450px
+        if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:450px;width:100%;margin-bottom:30px;">', unsafe_allow_html=True)
         st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
         st.subheader("VORTEZA LOGIN")
         pwd = st.text_input("Hasło:", type="password")
@@ -193,7 +208,6 @@ with st.sidebar:
         c_h = st.number_input("WYS [cm]:", min_value=0, value=100)
         c_wg = st.number_input("WAGA [kg]:", min_value=0, value=100)
         
-        # Nowe pola do przeliczania opakowań
         col_q1, col_q2 = st.columns(2)
         with col_q1:
             c_qt = st.number_input("SZTUK ŁĄCZNIE:", min_value=1, value=1)
@@ -217,7 +231,6 @@ if st.session_state.cargo:
     st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
     st.subheader("MANIFEST ZAŁADUNKOWY")
     df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'itemsPerCase', 'canStack']]
-    # Przeliczanie opakowań do wyświetlenia w tabeli
     df['OPAKOWANIA'] = df.apply(lambda x: math.ceil(x['total_qty'] / x['itemsPerCase']), axis=1)
     
     ed_df = st.data_editor(df, disabled=["name", "OPAKOWANIA"], hide_index=True, use_container_width=True)
@@ -231,7 +244,6 @@ if st.session_state.cargo:
 
     cases = []
     for e in st.session_state.cargo:
-        # Tu następuje magia przeliczania: np. 74 szt / 10 szt/opak = 8 brył do zapakowania
         num_cases = math.ceil(e['total_qty'] / e['itemsPerCase'])
         for _ in range(num_cases): cases.append(e.copy())
     
