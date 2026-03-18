@@ -54,21 +54,17 @@ def apply_vorteza_theme():
             @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;700&display=swap');
             :root {{ --v-copper: #B58863; --v-bg-panel: rgba(15, 15, 15, 0.98); }}
             {bg_style}
-            
             [data-testid="stSidebar"] {{ 
                 background-color: rgba(0, 0, 0, 0.85) !important; 
                 border-right: 2px solid var(--v-copper);
                 backdrop-filter: blur(10px);
             }}
-            
             [data-testid="stHeader"], [data-testid="stMainBlockContainer"] {{ background-color: transparent !important; }}
             .stApp {{ color: #FFFFFF; font-family: 'Montserrat', sans-serif; }}
-            
             [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {{
                 color: #FFFFFF !important;
                 font-weight: 500;
             }}
-
             .vorteza-card {{
                 background: var(--v-bg-panel); padding: 25px; border-radius: 2px;
                 border: 1px solid rgba(181, 136, 99, 0.3); border-left: 8px solid var(--v-copper);
@@ -200,10 +196,10 @@ with st.sidebar:
                 st.rerun()
     with t2:
         c_n = st.text_input("NAZWA:")
-        c_l = st.number_input("DŁ [cm]:", min_value=0, value=120)
-        c_w = st.number_input("SZER [cm]:", min_value=0, value=80)
-        c_h = st.number_input("WYS [cm]:", min_value=0, value=100)
-        c_wg = st.number_input("WAGA [kg]:", min_value=0, value=100)
+        c_l = st.number_input("DŁ [cm]:", min_value=1, value=120)
+        c_w = st.number_input("SZER [cm]:", min_value=1, value=80)
+        c_h = st.number_input("WYS [cm]:", min_value=1, value=100)
+        c_wg = st.number_input("WAGA [kg]:", min_value=1, value=100)
         col_q1, col_q2 = st.columns(2)
         with col_q1: c_qt = st.number_input("SZTUK ŁĄCZNIE:", min_value=1, value=1)
         with col_q2: c_ipc = st.number_input("SZT/OPAKOWANIE:", min_value=1, value=1)
@@ -217,7 +213,6 @@ with st.sidebar:
             
     st.divider()
     if st.button("RESTART SYSTEMU"): st.session_state.cargo = []; st.rerun()
-    # PRZYCISK WYLOGUJ
     if st.button("WYLOGUJ (SESJA)"): st.session_state.auth = False; st.rerun()
 
 st.title("VORTEZA STACK")
@@ -226,20 +221,24 @@ if st.session_state.cargo:
     st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
     st.subheader("MANIFEST ZAŁADUNKOWY")
     df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'itemsPerCase', 'canStack']]
-    df['OPAKOWANIA'] = df.apply(lambda x: math.ceil(x['total_qty'] / x['itemsPerCase']), axis=1)
+    
+    # ZABEZPIECZENIE PRZED ZeroDivisionError
+    df['OPAKOWANIA'] = df.apply(lambda x: math.ceil(x['total_qty'] / (x['itemsPerCase'] if x['itemsPerCase'] > 0 else 1)), axis=1)
     
     ed_df = st.data_editor(df, disabled=["name", "OPAKOWANIA"], hide_index=True, use_container_width=True)
     if not ed_df.equals(df):
         for idx, row in ed_df.iterrows(): 
-            st.session_state.cargo[idx]['total_qty'] = row['total_qty']
-            st.session_state.cargo[idx]['itemsPerCase'] = row['itemsPerCase']
+            st.session_state.cargo[idx]['total_qty'] = max(1, row['total_qty'])
+            st.session_state.cargo[idx]['itemsPerCase'] = max(1, row['itemsPerCase'])
             st.session_state.cargo[idx]['canStack'] = row['canStack']
         st.session_state.cargo = [i for i in st.session_state.cargo if i['total_qty'] > 0]; st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
     cases = []
     for e in st.session_state.cargo:
-        num_cases = math.ceil(e['total_qty'] / e['itemsPerCase'])
+        # Ponowne zabezpieczenie przy generowaniu brył
+        ipc = e['itemsPerCase'] if e['itemsPerCase'] > 0 else 1
+        num_cases = math.ceil(e['total_qty'] / ipc)
         for _ in range(num_cases): cases.append(e.copy())
     
     fleet = pack_logic(cases, veh)
