@@ -201,8 +201,14 @@ with st.sidebar:
                 st.rerun()
     with t2:
         c_n = st.text_input("NAZWA:")
-        c_l = st.number_input("DŁ [cm]:", 120); c_w = st.number_input("SZER [cm]:", 80); c_h = st.number_input("WYS [cm]:", 100)
-        c_wg = st.number_input("WAGA [kg]:", 100); c_qt = st.number_input("SZTUK:", 1, key="c_qty")
+        
+        # Ustawienie min_value=0 wyłącza blokadę "minimum tyle czy tyle" przy wpisywaniu
+        c_l = st.number_input("DŁ [cm]:", min_value=0, value=120)
+        c_w = st.number_input("SZER [cm]:", min_value=0, value=80)
+        c_h = st.number_input("WYS [cm]:", min_value=0, value=100)
+        c_wg = st.number_input("WAGA [kg]:", min_value=0, value=100)
+        
+        c_qt = st.number_input("SZTUK:", min_value=1, value=1, key="c_qty")
         can_s = st.checkbox("MOŻNA STACKOWAĆ?", value=False)
         
         if st.button("DODAJ NIESTANDARDOWY") and c_n:
@@ -260,6 +266,7 @@ if st.session_state.cargo:
                 
                 st.markdown("---")
                 st.write("**SKŁAD POJAZDU:**")
-                st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", 0: "SZT"}))
+                # Poprawiona nazwa kolumny w rename (z 0 na "SZT")
+                st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", "count": "SZT"}))
 else:
     st.info("System VORTEZA STACK gotowy. Dodaj produkty z panelu bocznego.")
