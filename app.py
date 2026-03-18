@@ -6,7 +6,7 @@ import base64
 import plotly.graph_objects as go
 
 # =========================================================
-# KONFIGURACJA GITHUB (Zgodnie z Twoim repo)
+# KONFIGURACJA GITHUB
 # =========================================================
 try:
     # Pobieranie tokena z Secrets Streamlit Cloud
@@ -15,11 +15,11 @@ except Exception:
     GITHUB_TOKEN = None
 
 REPO_OWNER = "natpio"
-REPO_NAME = "rentownosc-transportu"
+REPO_NAME = "VORTEZA-STACK"  # Zaktualizowana nazwa repozytorium
 FILE_PATH_PRODUCTS = "products.json"
 
 # =========================================================
-# STYLIZACJA VORTEZA
+# STYLIZACJA VORTEZA (Premium Dark & Copper)
 # =========================================================
 st.set_page_config(page_title="VORTEZA CARGO | SQM", layout="wide", page_icon="🚚")
 
@@ -50,11 +50,12 @@ def apply_vorteza_theme():
             }
             .stButton > button:hover { background-color: var(--v-copper); color: black; border: 1px solid var(--v-copper); }
             label[data-testid="stWidgetLabel"] { color: var(--v-copper) !important; text-transform: uppercase; font-weight: 600 !important; }
+            .stMetric { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px; border-bottom: 2px solid var(--v-copper); }
         </style>
     """, unsafe_allow_html=True)
 
 # =========================================================
-# POBIERANIE I MAPOWANIE TWOJEGO JSONA
+# POBIERANIE DANYCH Z GITHUB
 # =========================================================
 def get_products_from_github():
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH_PRODUCTS}"
@@ -69,24 +70,24 @@ def get_products_from_github():
             decoded_data = base64.b64decode(content['content']).decode('utf-8')
             raw_list = json.loads(decoded_data)
             
-            # Konwersja Twojej listy obiektów na słownik dla aplikacji
+            # Mapowanie pól z Twojego products.json
             processed = {}
             for item in raw_list:
                 processed[item['name']] = {
-                    "l": item['length'],    # Mapowanie 'length' -> 'l'
-                    "w": item['width'],     # Mapowanie 'width' -> 'w'
-                    "h": item['height'],    # Mapowanie 'height' -> 'h'
+                    "l": item['length'],
+                    "w": item['width'],
+                    "h": item['height'],
                     "weight": item['weight'],
-                    "stack": item['canStack'] # Mapowanie 'canStack' -> 'stack'
+                    "stack": item['canStack']
                 }
             return processed, None
         else:
-            return None, f"Błąd API: {response.status_code} - {response.reason}"
+            return None, f"Status {response.status_code}: {response.reason}"
     except Exception as e:
         return None, str(e)
 
 # =========================================================
-# LOGOWANIE
+# SYSTEM LOGOWANIA
 # =========================================================
 def check_password():
     if "auth_cargo" not in st.session_state:
@@ -97,87 +98,89 @@ def check_password():
             st.markdown("<br><br>", unsafe_allow_html=True)
             st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
             st.markdown("<h2 style='text-align:center;'>VORTEZA CARGO</h2>", unsafe_allow_html=True)
-            pwd = st.text_input("HASŁO:", type="password")
-            if st.button("AUTORYZUJ"):
+            pwd = st.text_input("HASŁO DOSTĘPOWE:", type="password")
+            if st.button("AUTORYZUJ WEJŚCIE"):
                 if pwd == "NowyRozdzial":
                     st.session_state["auth_cargo"] = True
                     st.rerun()
                 else:
-                    st.error("Nieprawidłowe hasło.")
+                    st.error("ODMOWA DOSTĘPU")
             st.markdown('</div>', unsafe_allow_html=True)
         return False
     return True
 
-# --- START ---
+# --- GŁÓWNA PĘTLA PROGRAMU ---
 apply_vorteza_theme()
 
 if check_password():
-    # Pobieranie danych z diagnostyką
+    # Pobieranie bazy produktów
     PRODUCTS, err = get_products_from_github()
     
     if err:
-        st.error(f"❌ Problem z bazą danych GitHub: {err}")
-        if not GITHUB_TOKEN:
-            st.warning("WSKAZÓWKA: Brakuje G_TOKEN w Secrets Streamlit Cloud.")
-        st.info(f"Szukany plik: {REPO_OWNER}/{REPO_NAME}/{FILE_PATH_PRODUCTS}")
+        st.error(f"❌ BŁĄD REPOZYTORIUM: {err}")
+        st.info(f"Sprawdź czy plik {FILE_PATH_PRODUCTS} znajduje się w {REPO_NAME}")
         st.stop()
 
     VEHICLES = {
-        "FTL (Tir)": {"l": 1360, "w": 245, "h": 265, "weight": 12000, "pallets": 33},
-        "Solówka 7m": {"l": 700, "w": 245, "h": 245, "weight": 3500, "pallets": 16},
+        "FTL (Tir)": {"l": 1360, "w": 245, "h": 265, "weight": 24000, "pallets": 33},
+        "Solówka 7m": {"l": 700, "w": 245, "h": 245, "weight": 6000, "pallets": 16},
+        "Solówka 6m": {"l": 600, "w": 245, "h": 245, "weight": 3500, "pallets": 14},
         "BUS (10ep)": {"l": 485, "w": 220, "h": 245, "weight": 1100, "pallets": 10},
     }
 
-    # Interfejs
-    c1, c2 = st.columns([1, 2], gap="large")
+    # Interfejs planowania
+    left_col, right_col = st.columns([1, 2], gap="large")
 
-    with c1:
+    with left_col:
         st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
-        v_name = st.selectbox("POJAZD:", list(VEHICLES.keys()))
+        st.subheader("Pojazd Transportowy")
+        v_name = st.selectbox("FLOTA:", list(VEHICLES.keys()))
         v = VEHICLES[v_name]
         
         st.markdown("---")
-        # Lista produktów z Twojego JSONa
-        prod_key = st.selectbox("PRODUKT SQM:", list(PRODUCTS.keys()))
-        qty = st.number_input("ILOŚĆ:", min_value=1, value=1)
+        st.subheader("Dodaj Ładunek")
+        prod_key = st.selectbox("PRODUKT Z BAZY JSON:", list(PRODUCTS.keys()))
+        qty = st.number_input("ILOŚĆ SZTUK:", min_value=1, value=1)
         
         if "cargo_list" not in st.session_state:
             st.session_state.cargo_list = []
 
-        if st.button("DODAJ DO PLANU"):
-            p = PRODUCTS[prod_key]
-            st.session_state.cargo_list.append({"name": prod_key, **p, "qty": qty})
+        if st.button("DODAJ DO MANIFESTU"):
+            p_data = PRODUCTS[prod_key]
+            st.session_state.cargo_list.append({"name": prod_key, **p_data, "qty": qty})
             st.rerun()
 
         if st.session_state.cargo_list:
-            if st.button("RESETUJ"):
+            if st.button("WYCZYŚĆ WSZYSTKO"):
                 st.session_state.cargo_list = []
                 st.rerun()
+            st.markdown("**Lista do załadunku:**")
             for i, item in enumerate(st.session_state.cargo_list):
-                st.caption(f"{i+1}. {item['name']} x{item['qty']}")
+                st.caption(f"{i+1}. {item['name']} (x{item['qty']})")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with c2:
+    with right_col:
         if st.session_state.cargo_list:
-            # Uproszczony algorytm pakowania
-            all_items = []
+            # Przygotowanie danych do algorytmu
+            to_pack = []
             for entry in st.session_state.cargo_list:
                 for _ in range(entry['qty']):
-                    all_items.append(entry)
+                    to_pack.append(entry)
 
-            all_items.sort(key=lambda x: x['l']*x['w'], reverse=True)
+            # Prosty algorytm rozmieszczenia (Floor First)
+            to_pack.sort(key=lambda x: x['l']*x['w'], reverse=True)
             stacks = []
-            total_weight = 0
+            total_w = 0
             
-            for item in all_items:
+            for item in to_pack:
                 placed = False
                 if item['stack']:
                     for s in stacks:
-                        ch = sum(i['h'] for i in s['items'])
-                        if s['l'] >= item['l'] and s['w'] >= item['w'] and (ch + item['h']) <= v['h']:
-                            if (total_weight + item['weight']) <= v['weight']:
+                        h_current = sum(i['h'] for i in s['items'])
+                        if s['l'] >= item['l'] and s['w'] >= item['w'] and (h_current + item['h']) <= v['h']:
+                            if (total_w + item['weight']) <= v['weight']:
                                 s['items'].append(item)
-                                total_weight += item['weight']
+                                total_w += item['weight']
                                 placed = True
                                 break
                 
@@ -190,42 +193,47 @@ if check_password():
                                         y + item['w'] <= s['y'] or y >= s['y'] + s['w']):
                                     collision = True
                                     break
-                            if not collision and (total_weight + item['weight']) <= v['weight']:
+                            if not collision and (total_w + item['weight']) <= v['weight']:
                                 stacks.append({'x': x, 'y': y, 'l': item['l'], 'w': item['w'], 'items': [item]})
-                                total_weight += item['weight']
+                                total_w += item['weight']
                                 placed = True
                                 break
                         if placed: break
 
-            # Wizualizacja 3D
+            # Plotly 3D Visualization
             fig = go.Figure()
+            # Rama pojazdu
             fig.add_trace(go.Scatter3d(
                 x=[0, v['l'], v['l'], 0, 0, 0, v['l'], v['l'], 0, 0],
                 y=[0, 0, v['w'], v['w'], 0, 0, 0, v['w'], v['w'], 0],
                 z=[0, 0, 0, 0, 0, v['h'], v['h'], v['h'], v['h'], v['h']],
-                mode='lines', line=dict(color='#B58863', width=2), name='Pojazd'
+                mode='lines', line=dict(color='#B58863', width=2), name='Vehicle'
             ))
 
             for s in stacks:
-                z_off = 0
+                z_ptr = 0
                 for item in s['items']:
                     fig.add_trace(go.Mesh3d(
                         x=[s['x'], s['x']+item['l'], s['x']+item['l'], s['x'], s['x'], s['x']+item['l'], s['x']+item['l'], s['x']],
                         y=[s['y'], s['y'], s['y']+item['w'], s['y']+item['w'], s['y'], s['y'], s['y']+item['w'], s['y']+item['w']],
-                        z=[z_off, z_off, z_off, z_off, z_off+item['h'], z_off+item['h'], z_off+item['h'], z_off+item['h']],
+                        z=[z_ptr, z_ptr, z_ptr, z_ptr, z_ptr+item['h'], z_ptr+item['h'], z_ptr+item['h'], z_ptr+item['h']],
                         i=[7,0,0,0,4,4,6,6,4,0,3,2], j=[3,4,1,2,5,6,5,2,0,1,6,3], k=[0,7,2,3,6,7,1,1,5,5,7,6],
-                        color='#B58863', opacity=0.8, flatshading=True
+                        color='#B58863', opacity=0.7, flatshading=True
                     ))
-                    z_off += item['h']
+                    z_ptr += item['h']
 
-            fig.update_layout(scene=dict(xaxis_title='Dł.', yaxis_title='Szer.', zaxis_title='Wys.', aspectmode='data'),
-                              paper_bgcolor='black', margin=dict(l=0,r=0,b=0,t=0), height=500)
+            fig.update_layout(
+                scene=dict(xaxis_title='L (cm)', yaxis_title='W (cm)', zaxis_title='H (cm)', aspectmode='data'),
+                paper_bgcolor='black', margin=dict(l=0,r=0,b=0,t=0), height=550
+            )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Dashboard
+            # Sekcja Wyników
             st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
             m1, m2, m3 = st.columns(3)
-            m1.metric("WAGA", f"{total_weight} kg", f"{v['weight']-total_weight} kg wolne")
-            m2.metric("MIEJSCA (EP)", f"{len(stacks)} / {v['pallets']}")
-            m3.metric("WYKORZYSTANIE", f"{round((total_weight/v['weight'])*100, 1)}%")
+            m1.metric("WAGA CAŁKOWITA", f"{total_w} kg", f"{v['weight']-total_w} kg rezerwy")
+            m2.metric("ZAJĘTE MIEJSCA", f"{len(stacks)} EP", f"{v['pallets']} max")
+            m3.metric("EFEKTYWNOŚĆ WAGOWA", f"{round((total_w/v['weight'])*100, 1)}%")
             st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.info("Manifest jest pusty. Wybierz produkty z bazy i kliknij 'Dodaj do manifestu'.")
