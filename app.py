@@ -30,7 +30,6 @@ def get_base64_img(url):
     except: return None
     return None
 
-# Próba pobrania tła i logo
 BG_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/bg_vorteza.jpg")
 if not BG_B64:
     BG_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/bg_vorteza.png")
@@ -55,30 +54,21 @@ def apply_vorteza_theme():
             @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;700&display=swap');
             :root {{ --v-copper: #B58863; --v-bg-panel: rgba(15, 15, 15, 0.98); }}
             {bg_style}
-            
             [data-testid="stHeader"], [data-testid="stMainBlockContainer"] {{ background-color: transparent !important; }}
             .stApp {{ color: #FFFFFF; font-family: 'Montserrat', sans-serif; }}
             [data-testid="stSidebar"] {{ background-color: #000000 !important; border-right: 2px solid var(--v-copper); }}
-
-            /* Panele i Karty */
             .vorteza-card {{
                 background: var(--v-bg-panel); padding: 25px; border-radius: 2px;
                 border: 1px solid rgba(181, 136, 99, 0.3); border-left: 8px solid var(--v-copper);
                 margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
             }}
-
-            /* Tabela i Edytor Danych */
             .stTable, [data-testid="stTable"] {{ background-color: transparent !important; border: 1px solid #333 !important; }}
             th {{ background-color: var(--v-copper) !important; color: black !important; text-transform: uppercase; letter-spacing: 1px; font-size: 0.85rem !important; }}
             td {{ background-color: #111 !important; color: #EEE !important; border-bottom: 1px solid #222 !important; }}
-            
-            /* Metryki i Progress Bar */
             .stMetric {{ background: #000; padding: 15px; border: 1px solid #222; border-bottom: 4px solid var(--v-copper); }}
             [data-testid="stMetricValue"] {{ color: #FFF !important; font-weight: 700; }}
             .stProgress > div > div > div > div {{ background-color: var(--v-copper) !important; }}
-
             h1, h2, h3 {{ color: var(--v-copper) !important; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; }}
-            
             .stButton > button {{
                 background-color: transparent; color: var(--v-copper); border: 2px solid var(--v-copper);
                 font-weight: 700; text-transform: uppercase; width: 100%; border-radius: 0px;
@@ -108,7 +98,6 @@ def pack_logic(items, veh):
         for item in remaining:
             if curr_w + item['weight'] > veh['weight']: still_to_pack.append(item); continue
             added = False
-            # Sprawdzenie możliwości stackowania (piętrowania)
             if item.get('canStack', True):
                 for s in placed_stacks:
                     ch = sum(i['height'] for i in s['items'])
@@ -154,7 +143,6 @@ def draw_3d(stacks, veh, color_map):
 apply_vorteza_theme()
 if "auth" not in st.session_state: st.session_state.auth = False
 
-# LOGOWANIE
 if not st.session_state.auth:
     _, col_login, _ = st.columns([1, 1.2, 1])
     with col_login:
@@ -166,7 +154,6 @@ if not st.session_state.auth:
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# DANE I SESJA
 prods_base = get_products()
 if 'cargo' not in st.session_state: st.session_state.cargo = []
 if 'colors' not in st.session_state:
@@ -201,20 +188,24 @@ with st.sidebar:
                 st.rerun()
     with t2:
         c_n = st.text_input("NAZWA:")
-        
-        # Ustawienie min_value=0 wyłącza blokadę "minimum tyle czy tyle" przy wpisywaniu
         c_l = st.number_input("DŁ [cm]:", min_value=0, value=120)
         c_w = st.number_input("SZER [cm]:", min_value=0, value=80)
         c_h = st.number_input("WYS [cm]:", min_value=0, value=100)
         c_wg = st.number_input("WAGA [kg]:", min_value=0, value=100)
         
-        c_qt = st.number_input("SZTUK:", min_value=1, value=1, key="c_qty")
+        # Nowe pola do przeliczania opakowań
+        col_q1, col_q2 = st.columns(2)
+        with col_q1:
+            c_qt = st.number_input("SZTUK ŁĄCZNIE:", min_value=1, value=1)
+        with col_q2:
+            c_ipc = st.number_input("SZT/OPAKOWANIE:", min_value=1, value=1)
+        
         can_s = st.checkbox("MOŻNA STACKOWAĆ?", value=False)
         
         if st.button("DODAJ NIESTANDARDOWY") and c_n:
             st.session_state.cargo.append({
                 "name": c_n, "length": c_l, "width": c_w, "height": c_h, 
-                "weight": c_wg, "total_qty": c_qt, "canStack": can_s, "itemsPerCase": 1
+                "weight": c_wg, "total_qty": c_qt, "canStack": can_s, "itemsPerCase": c_ipc
             })
             st.session_state.colors[c_n] = "#D4A373"; st.rerun()
             
@@ -225,18 +216,24 @@ st.title("VORTEZA STACK")
 if st.session_state.cargo:
     st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
     st.subheader("MANIFEST ZAŁADUNKOWY")
-    df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'canStack']]
-    ed_df = st.data_editor(df, disabled=["name"], hide_index=True, use_container_width=True)
+    df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'itemsPerCase', 'canStack']]
+    # Przeliczanie opakowań do wyświetlenia w tabeli
+    df['OPAKOWANIA'] = df.apply(lambda x: math.ceil(x['total_qty'] / x['itemsPerCase']), axis=1)
+    
+    ed_df = st.data_editor(df, disabled=["name", "OPAKOWANIA"], hide_index=True, use_container_width=True)
     if not ed_df.equals(df):
         for idx, row in ed_df.iterrows(): 
             st.session_state.cargo[idx]['total_qty'] = row['total_qty']
+            st.session_state.cargo[idx]['itemsPerCase'] = row['itemsPerCase']
             st.session_state.cargo[idx]['canStack'] = row['canStack']
         st.session_state.cargo = [i for i in st.session_state.cargo if i['total_qty'] > 0]; st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
     cases = []
     for e in st.session_state.cargo:
-        for _ in range(math.ceil(e['total_qty'] / e.get('itemsPerCase', 1))): cases.append(e.copy())
+        # Tu następuje magia przeliczania: np. 74 szt / 10 szt/opak = 8 brył do zapakowania
+        num_cases = math.ceil(e['total_qty'] / e['itemsPerCase'])
+        for _ in range(num_cases): cases.append(e.copy())
     
     fleet = pack_logic(cases, veh)
     for i, res in enumerate(fleet):
@@ -244,7 +241,6 @@ if st.session_state.cargo:
             c1, c2 = st.columns([2.2, 1])
             with c1: st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.colors), use_container_width=True)
             with c2:
-                # OBLICZENIA ANALITYCZNE
                 a_used = sum(s['l']*s['w'] for s in res['stacks'])
                 a_total = veh['l'] * veh['w']
                 v_used = sum(it['length']*it['width']*it['height'] for s in res['stacks'] for it in s['items'])
@@ -254,19 +250,14 @@ if st.session_state.cargo:
                 st.markdown("### STATYSTYKI")
                 st.metric("METRY BIEŻĄCE (LDM)", f"{ldm} m")
                 st.metric("ZAJĘTE EP", f"{round(a_used/9600, 1)} / {veh['pallets']}")
-                
                 st.write(f"**POWIERZCHNIA:** {round(a_used/10000, 2)} m² ({round(a_used/a_total*100, 1)}%)")
                 st.progress(min(a_used/a_total, 1.0))
-                
                 st.write(f"**OBJĘTOŚĆ:** {round(v_used/1000000, 2)} m³ ({round(v_used/v_total*100, 1)}%)")
                 st.progress(min(v_used/v_total, 1.0))
-                
                 st.write(f"**WAGA:** {res['weight']} / {veh['weight']} kg")
                 st.progress(min(res['weight']/veh['weight'], 1.0))
-                
                 st.markdown("---")
-                st.write("**SKŁAD POJAZDU:**")
-                # Poprawiona nazwa kolumny w rename (z 0 na "SZT")
-                st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", "count": "SZT"}))
+                st.write("**SKŁAD POJAZDU (OPAKOWANIA):**")
+                st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", "count": "OPAK"}))
 else:
     st.info("System VORTEZA STACK gotowy. Dodaj produkty z panelu bocznego.")
