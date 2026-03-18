@@ -55,7 +55,6 @@ def apply_vorteza_theme():
             :root {{ --v-copper: #B58863; --v-bg-panel: rgba(15, 15, 15, 0.98); }}
             {bg_style}
             
-            /* Poprawa widoczności sidebaru */
             [data-testid="stSidebar"] {{ 
                 background-color: rgba(0, 0, 0, 0.85) !important; 
                 border-right: 2px solid var(--v-copper);
@@ -129,7 +128,6 @@ def pack_logic(items, veh):
 
 def draw_3d(stacks, veh, color_map):
     fig = go.Figure()
-    # NAPRAWIONO: veh['w'] zamiast Corey_w
     fig.add_trace(go.Scatter3d(
         x=[0, veh['l'], veh['l'], 0, 0, 0, veh['l'], veh['l'], 0, 0],
         y=[0, 0, veh['w'], veh['w'], 0, 0, 0, veh['w'], veh['w'], 0],
@@ -206,15 +204,10 @@ with st.sidebar:
         c_w = st.number_input("SZER [cm]:", min_value=0, value=80)
         c_h = st.number_input("WYS [cm]:", min_value=0, value=100)
         c_wg = st.number_input("WAGA [kg]:", min_value=0, value=100)
-        
         col_q1, col_q2 = st.columns(2)
-        with col_q1:
-            c_qt = st.number_input("SZTUK ŁĄCZNIE:", min_value=1, value=1)
-        with col_q2:
-            c_ipc = st.number_input("SZT/OPAKOWANIE:", min_value=1, value=1)
-        
+        with col_q1: c_qt = st.number_input("SZTUK ŁĄCZNIE:", min_value=1, value=1)
+        with col_q2: c_ipc = st.number_input("SZT/OPAKOWANIE:", min_value=1, value=1)
         can_s = st.checkbox("MOŻNA STACKOWAĆ?", value=False)
-        
         if st.button("DODAJ NIESTANDARDOWY") and c_n:
             st.session_state.cargo.append({
                 "name": c_n, "length": c_l, "width": c_w, "height": c_h, 
@@ -222,7 +215,10 @@ with st.sidebar:
             })
             st.session_state.colors[c_n] = "#D4A373"; st.rerun()
             
+    st.divider()
     if st.button("RESTART SYSTEMU"): st.session_state.cargo = []; st.rerun()
+    # PRZYCISK WYLOGUJ
+    if st.button("WYLOGUJ (SESJA)"): st.session_state.auth = False; st.rerun()
 
 st.title("VORTEZA STACK")
 
@@ -257,7 +253,6 @@ if st.session_state.cargo:
                 v_used = sum(it['length']*it['width']*it['height'] for s in res['stacks'] for it in s['items'])
                 v_total = veh['l'] * veh['w'] * veh['h']
                 ldm = round(max([s['x'] + s['l'] for s in res['stacks']]) / 100, 2) if res['stacks'] else 0
-                
                 st.markdown("### STATYSTYKI")
                 st.metric("METRY BIEŻĄCE (LDM)", f"{ldm} m")
                 st.metric("ZAJĘTE EP", f"{round(a_used/9600, 1)} / {veh['pallets']}")
