@@ -192,7 +192,7 @@ with st.sidebar:
                 p_d = next(p for p in prods_base if p['name'] == sel)
                 ex = next((i for i in st.session_state.cargo if i['name'] == sel), None)
                 if ex: ex['total_qty'] += qty
-                else: st.session_state.cargo.append({"name": sel, "total_qty": qty, **p_d})
+                else: st.session_state.cargo.append({"name": sel, "total_qty": qty, "itemsPerCase": 1, **p_d})
                 st.rerun()
     with t2:
         c_n = st.text_input("NAZWA:")
@@ -220,49 +220,63 @@ st.title("VORTEZA STACK")
 if st.session_state.cargo:
     st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
     st.subheader("MANIFEST ZAŁADUNKOWY")
-    df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'itemsPerCase', 'canStack']]
     
-    # ZABEZPIECZENIE PRZED ZeroDivisionError
-    df['OPAKOWANIA'] = df.apply(lambda x: math.ceil(x['total_qty'] / (x['itemsPerCase'] if x['itemsPerCase'] > 0 else 1)), axis=1)
+    # Przygotowanie danych do edytora
+    temp_df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'itemsPerCase', 'canStack']]
+    temp_df['OPAKOWANIA'] = temp_df.apply(lambda x: math.ceil(x['total_qty'] / (x['itemsPerCase'] if x['itemsPerCase'] > 0 else 1)), axis=1)
     
-    ed_df = st.data_editor(df, disabled=["name", "OPAKOWANIA"], hide_index=True, use_container_width=True)
-    if not ed_df.equals(df):
-        for idx, row in ed_df.iterrows(): 
-            st.session_state.cargo[idx]['total_qty'] = max(1, row['total_qty'])
-            st.session_state.cargo[idx]['itemsPerCase'] = max(1, row['itemsPerCase'])
-            st.session_state.cargo[idx]['canStack'] = row['canStack']
-        st.session_state.cargo = [i for i in st.session_state.cargo if i['total_qty'] > 0]; st.rerun()
+    # Edytor danych - pozwala na wpisanie 0 w 'total_qty'
+    ed_df = st.data_editor(temp_df, disabled=["name", "OPAKOWANIA"], hide_index=True, use_container_width=True)
+    
+    # LOGIKA SYNCHRONIZACJI I USUWANIA
+    if not ed_df.equals(temp_df):
+        new_cargo = []
+        for idx, row in ed_df.iterrows():
+            if row['total_qty'] > 0:  # TYLKO PRODUKTY Z ILOŚCIĄ > 0 ZOSTAJĄ
+                # Pobierz oryginalne wymiary/wagę z session_state na podstawie nazwy
+                orig = next(item for item in st.session_state.cargo if item['name'] == row['name'])
+                new_item = orig.copy()
+                new_item['total_qty'] = row['total_qty']
+                new_item['itemsPerCase'] = max(1, row['itemsPerCase']) # Zabezpieczenie przed 0 w opakowaniu
+                new_item['canStack'] = row['canStack']
+                new_cargo.append(new_item)
+        
+        st.session_state.cargo = new_cargo
+        st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    cases = []
-    for e in st.session_state.cargo:
-        # Ponowne zabezpieczenie przy generowaniu brył
-        ipc = e['itemsPerCase'] if e['itemsPerCase'] > 0 else 1
-        num_cases = math.ceil(e['total_qty'] / ipc)
-        for _ in range(num_cases): cases.append(e.copy())
-    
-    fleet = pack_logic(cases, veh)
-    for i, res in enumerate(fleet):
-        with st.expander(f"🚛 POJAZD #{i+1} - ANALIZA", expanded=True):
-            c1, c2 = st.columns([2.2, 1])
-            with c1: st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.colors), use_container_width=True)
-            with c2:
-                a_used = sum(s['l']*s['w'] for s in res['stacks'])
-                a_total = veh['l'] * veh['w']
-                v_used = sum(it['length']*it['width']*it['height'] for s in res['stacks'] for it in s['items'])
-                v_total = veh['l'] * veh['w'] * veh['h']
-                ldm = round(max([s['x'] + s['l'] for s in res['stacks']]) / 100, 2) if res['stacks'] else 0
-                st.markdown("### STATYSTYKI")
-                st.metric("METRY BIEŻĄCE (LDM)", f"{ldm} m")
-                st.metric("ZAJĘTE EP", f"{round(a_used/9600, 1)} / {veh['pallets']}")
-                st.write(f"**POWIERZCHNIA:** {round(a_used/10000, 2)} m² ({round(a_used/a_total*100, 1)}%)")
-                st.progress(min(a_used/a_total, 1.0))
-                st.write(f"**OBJĘTOŚĆ:** {round(v_used/1000000, 2)} m³ ({round(v_used/v_total*100, 1)}%)")
-                st.progress(min(v_used/v_total, 1.0))
-                st.write(f"**WAGA:** {res['weight']} / {veh['weight']} kg")
-                st.progress(min(res['weight']/veh['weight'], 1.0))
-                st.markdown("---")
-                st.write("**SKŁAD POJAZDU (OPAKOWANIA):**")
-                st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", "count": "OPAK"}))
+    # Przygotowanie brył do pakowania (tylko jeśli po edycji coś zostało)
+    if st.session_state.cargo:
+        cases = []
+        for e in st.session_state.cargo:
+            ipc = e['itemsPerCase'] if e['itemsPerCase'] > 0 else 1
+            num_cases = math.ceil(e['total_qty'] / ipc)
+            for _ in range(num_cases): cases.append(e.copy())
+        
+        fleet = pack_logic(cases, veh)
+        for i, res in enumerate(fleet):
+            with st.expander(f"🚛 POJAZD #{i+1} - ANALIZA", expanded=True):
+                c1, c2 = st.columns([2.2, 1])
+                with c1: st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.colors), use_container_width=True)
+                with c2:
+                    a_used = sum(s['l']*s['w'] for s in res['stacks'])
+                    a_total = veh['l'] * veh['w']
+                    v_used = sum(it['length']*it['width']*it['height'] for s in res['stacks'] for it in s['items'])
+                    v_total = veh['l'] * veh['w'] * veh['h']
+                    ldm = round(max([s['x'] + s['l'] for s in res['stacks']]) / 100, 2) if res['stacks'] else 0
+                    st.markdown("### STATYSTYKI")
+                    st.metric("METRY BIEŻĄCE (LDM)", f"{ldm} m")
+                    st.metric("ZAJĘTE EP", f"{round(a_used/9600, 1)} / {veh['pallets']}")
+                    st.write(f"**POWIERZCHNIA:** {round(a_used/10000, 2)} m² ({round(a_used/a_total*100, 1)}%)")
+                    st.progress(min(a_used/a_total, 1.0))
+                    st.write(f"**OBJĘTOŚĆ:** {round(v_used/1000000, 2)} m³ ({round(v_used/v_total*100, 1)}%)")
+                    st.progress(min(v_used/v_total, 1.0))
+                    st.write(f"**WAGA:** {res['weight']} / {veh['weight']} kg")
+                    st.progress(min(res['weight']/veh['weight'], 1.0))
+                    st.markdown("---")
+                    st.write("**SKŁAD POJAZDU (OPAKOWANIA):**")
+                    st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", "count": "OPAK"}))
+    else:
+        st.info("Manifest jest pusty. Dodaj produkty z panelu bocznego.")
 else:
     st.info("System VORTEZA STACK gotowy. Dodaj produkty z panelu bocznego.")
