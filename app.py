@@ -30,7 +30,7 @@ def get_base64_img(url):
     except: return None
     return None
 
-# Pobieranie tła i logo
+# Próba pobrania tła i logo
 BG_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/bg_vorteza.jpg")
 if not BG_B64:
     BG_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/bg_vorteza.png")
@@ -67,24 +67,10 @@ def apply_vorteza_theme():
                 margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
             }}
 
-            /* Stylizacja Tabel (Usunięcie bieli) */
-            .stTable, [data-testid="stTable"] {{ 
-                background-color: transparent !important; 
-                border: 1px solid #333 !important; 
-            }}
-            th {{ 
-                background-color: var(--v-copper) !important; 
-                color: black !important; 
-                text-transform: uppercase; 
-                letter-spacing: 1px; 
-                font-size: 0.85rem !important;
-                padding: 10px !important;
-            }}
-            td {{ 
-                background-color: #111 !important; 
-                color: #EEE !important; 
-                border-bottom: 1px solid #222 !important; 
-            }}
+            /* Tabela i Edytor Danych */
+            .stTable, [data-testid="stTable"] {{ background-color: transparent !important; border: 1px solid #333 !important; }}
+            th {{ background-color: var(--v-copper) !important; color: black !important; text-transform: uppercase; letter-spacing: 1px; font-size: 0.85rem !important; }}
+            td {{ background-color: #111 !important; color: #EEE !important; border-bottom: 1px solid #222 !important; }}
             
             /* Metryki i Progress Bar */
             .stMetric {{ background: #000; padding: 15px; border: 1px solid #222; border-bottom: 4px solid var(--v-copper); }}
@@ -102,7 +88,7 @@ def apply_vorteza_theme():
     """, unsafe_allow_html=True)
 
 # =========================================================
-# 3. LOGIKA PAKOWANIA I DANYCH
+# 3. LOGIKA PAKOWANIA
 # =========================================================
 def get_products():
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH_PRODUCTS}"
@@ -122,6 +108,7 @@ def pack_logic(items, veh):
         for item in remaining:
             if curr_w + item['weight'] > veh['weight']: still_to_pack.append(item); continue
             added = False
+            # Sprawdzenie możliwości stackowania (piętrowania)
             if item.get('canStack', True):
                 for s in placed_stacks:
                     ch = sum(i['height'] for i in s['items'])
@@ -173,9 +160,9 @@ if not st.session_state.auth:
     with col_login:
         if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:200px;margin-bottom:30px;">', unsafe_allow_html=True)
         st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
-        st.subheader("VORTEZA SYSTEM LOGIN")
-        pwd = st.text_input("Hasło dostępowe:", type="password")
-        if st.button("WEJDŹ DO SYSTEMU") and pwd == MASTER_PASSWORD: st.session_state.auth = True; st.rerun()
+        st.subheader("VORTEZA LOGIN")
+        pwd = st.text_input("Hasło:", type="password")
+        if st.button("WEJDŹ") and pwd == MASTER_PASSWORD: st.session_state.auth = True; st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
@@ -195,13 +182,13 @@ VEHICLES = {
 with st.sidebar:
     if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:180px;margin-bottom:20px;">', unsafe_allow_html=True)
     st.header("1. POJAZD")
-    v_type = st.selectbox("TYP FLOTY:", list(VEHICLES.keys()))
+    v_type = st.selectbox("TYP:", list(VEHICLES.keys()))
     veh = VEHICLES[v_type]
     
     st.divider()
     
     st.header("2. DODAJ ŁADUNEK")
-    t1, t2 = st.tabs(["BAZA", "WŁASNY"])
+    t1, t2 = st.tabs(["Z BAZY", "WŁASNY"])
     with t1:
         sel = st.selectbox("PRODUKT:", [p['name'] for p in prods_base], index=None)
         qty = st.number_input("SZTUK:", min_value=1, value=1, key="db_qty")
@@ -216,8 +203,13 @@ with st.sidebar:
         c_n = st.text_input("NAZWA:")
         c_l = st.number_input("DŁ [cm]:", 120); c_w = st.number_input("SZER [cm]:", 80); c_h = st.number_input("WYS [cm]:", 100)
         c_wg = st.number_input("WAGA [kg]:", 100); c_qt = st.number_input("SZTUK:", 1, key="c_qty")
+        can_s = st.checkbox("MOŻNA STACKOWAĆ?", value=False)
+        
         if st.button("DODAJ NIESTANDARDOWY") and c_n:
-            st.session_state.cargo.append({"name": c_n, "length": c_l, "width": c_w, "height": c_h, "weight": c_wg, "total_qty": c_qt, "canStack": False, "itemsPerCase": 1})
+            st.session_state.cargo.append({
+                "name": c_n, "length": c_l, "width": c_w, "height": c_h, 
+                "weight": c_wg, "total_qty": c_qt, "canStack": can_s, "itemsPerCase": 1
+            })
             st.session_state.colors[c_n] = "#D4A373"; st.rerun()
             
     if st.button("RESTART SYSTEMU"): st.session_state.cargo = []; st.rerun()
@@ -226,26 +218,27 @@ st.title("VORTEZA STACK")
 
 if st.session_state.cargo:
     st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
-    st.subheader("MANIFEST")
-    df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty']]
+    st.subheader("MANIFEST ZAŁADUNKOWY")
+    df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty', 'canStack']]
     ed_df = st.data_editor(df, disabled=["name"], hide_index=True, use_container_width=True)
     if not ed_df.equals(df):
-        for idx, row in ed_df.iterrows(): st.session_state.cargo[idx]['total_qty'] = row['total_qty']
+        for idx, row in ed_df.iterrows(): 
+            st.session_state.cargo[idx]['total_qty'] = row['total_qty']
+            st.session_state.cargo[idx]['canStack'] = row['canStack']
         st.session_state.cargo = [i for i in st.session_state.cargo if i['total_qty'] > 0]; st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Przygotowanie skrzyń do algorytmu
     cases = []
     for e in st.session_state.cargo:
         for _ in range(math.ceil(e['total_qty'] / e.get('itemsPerCase', 1))): cases.append(e.copy())
     
     fleet = pack_logic(cases, veh)
     for i, res in enumerate(fleet):
-        with st.expander(f"🚛 POJAZD #{i+1} - ANALIZA ZAŁADUNKU", expanded=True):
+        with st.expander(f"🚛 POJAZD #{i+1} - ANALIZA", expanded=True):
             c1, c2 = st.columns([2.2, 1])
             with c1: st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.colors), use_container_width=True)
             with c2:
-                # OBLICZENIA
+                # OBLICZENIA ANALITYCZNE
                 a_used = sum(s['l']*s['w'] for s in res['stacks'])
                 a_total = veh['l'] * veh['w']
                 v_used = sum(it['length']*it['width']*it['height'] for s in res['stacks'] for it in s['items'])
@@ -266,7 +259,7 @@ if st.session_state.cargo:
                 st.progress(min(res['weight']/veh['weight'], 1.0))
                 
                 st.markdown("---")
-                st.write("**SKŁAD JEDNOSTKOWY:**")
+                st.write("**SKŁAD POJAZDU:**")
                 st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", 0: "SZT"}))
 else:
-    st.info("System VORTEZA STACK gotowy do pracy. Dodaj ładunek w panelu bocznym.")
+    st.info("System VORTEZA STACK gotowy. Dodaj produkty z panelu bocznego.")
