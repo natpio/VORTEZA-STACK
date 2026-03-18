@@ -7,7 +7,7 @@ import math
 import plotly.graph_objects as go
 
 # =========================================================
-# 1. KONFIGURACJA I ZASOBY
+# 1. KONFIGURACJA ZASOBÓW I GITHUB
 # =========================================================
 try:
     GITHUB_TOKEN = st.secrets["G_TOKEN"]
@@ -30,13 +30,14 @@ def get_base64_img(url):
     except: return None
     return None
 
+# Pobieranie tła i logo
 BG_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/bg_vorteza.jpg")
 if not BG_B64:
     BG_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/bg_vorteza.png")
 LOGO_B64 = get_base64_img(f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/logo_vorteza.png")
 
 # =========================================================
-# 2. STYLIZACJA VORTEZA STACK V2
+# 2. STYLIZACJA INTERFEJSU (VORTEZA STACK DARK)
 # =========================================================
 st.set_page_config(page_title="VORTEZA STACK", layout="wide", page_icon="🚚")
 
@@ -66,10 +67,24 @@ def apply_vorteza_theme():
                 margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
             }}
 
-            /* Naprawa Tabel i DataEditora */
-            .stTable {{ background-color: transparent !important; border: 1px solid #333 !important; }}
-            th {{ background-color: var(--v-copper) !important; color: black !important; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem !important; }}
-            td {{ background-color: #111 !important; color: #EEE !important; border-bottom: 1px solid #222 !important; }}
+            /* Stylizacja Tabel (Usunięcie bieli) */
+            .stTable, [data-testid="stTable"] {{ 
+                background-color: transparent !important; 
+                border: 1px solid #333 !important; 
+            }}
+            th {{ 
+                background-color: var(--v-copper) !important; 
+                color: black !important; 
+                text-transform: uppercase; 
+                letter-spacing: 1px; 
+                font-size: 0.85rem !important;
+                padding: 10px !important;
+            }}
+            td {{ 
+                background-color: #111 !important; 
+                color: #EEE !important; 
+                border-bottom: 1px solid #222 !important; 
+            }}
             
             /* Metryki i Progress Bar */
             .stMetric {{ background: #000; padding: 15px; border: 1px solid #222; border-bottom: 4px solid var(--v-copper); }}
@@ -77,16 +92,17 @@ def apply_vorteza_theme():
             .stProgress > div > div > div > div {{ background-color: var(--v-copper) !important; }}
 
             h1, h2, h3 {{ color: var(--v-copper) !important; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; }}
+            
             .stButton > button {{
                 background-color: transparent; color: var(--v-copper); border: 2px solid var(--v-copper);
-                font-weight: 700; text-transform: uppercase; width: 100%; border-radius: 0px; transition: 0.3s;
+                font-weight: 700; text-transform: uppercase; width: 100%; border-radius: 0px;
             }}
             .stButton > button:hover {{ background-color: var(--v-copper); color: #000; box-shadow: 0 0 15px var(--v-copper); }}
         </style>
     """, unsafe_allow_html=True)
 
 # =========================================================
-# 3. LOGIKA I OBLICZENIA
+# 3. LOGIKA PAKOWANIA I DANYCH
 # =========================================================
 def get_products():
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH_PRODUCTS}"
@@ -146,27 +162,28 @@ def draw_3d(stacks, veh, color_map):
     return fig
 
 # =========================================================
-# 4. START APLIKACJI
+# 4. GŁÓWNA APLIKACJA
 # =========================================================
 apply_vorteza_theme()
 if "auth" not in st.session_state: st.session_state.auth = False
 
+# LOGOWANIE
 if not st.session_state.auth:
     _, col_login, _ = st.columns([1, 1.2, 1])
     with col_login:
         if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:200px;margin-bottom:30px;">', unsafe_allow_html=True)
         st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
-        st.subheader("VORTEZA LOGIN")
-        pwd = st.text_input("Hasło:", type="password")
-        if st.button("AUTORYZACJA") and pwd == MASTER_PASSWORD: st.session_state.auth = True; st.rerun()
+        st.subheader("VORTEZA SYSTEM LOGIN")
+        pwd = st.text_input("Hasło dostępowe:", type="password")
+        if st.button("WEJDŹ DO SYSTEMU") and pwd == MASTER_PASSWORD: st.session_state.auth = True; st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
 # DANE I SESJA
-prods = get_products()
+prods_base = get_products()
 if 'cargo' not in st.session_state: st.session_state.cargo = []
 if 'colors' not in st.session_state:
-    st.session_state.colors = {p['name']: ["#B58863", "#967052", "#7A5B43", "#D4A373", "#A68A64"][i%5] for i, p in enumerate(prods)}
+    st.session_state.colors = {p['name']: ["#B58863", "#967052", "#7A5B43", "#D4A373", "#A68A64"][i%5] for i, p in enumerate(prods_base)}
 
 VEHICLES = {
     "FTL (Tir)": {"l": 1360, "w": 245, "h": 265, "weight": 24000, "pallets": 33},
@@ -178,19 +195,23 @@ VEHICLES = {
 with st.sidebar:
     if LOGO_B64: st.markdown(f'<img src="data:image/png;base64,{LOGO_B64}" style="display:block;margin:auto;max-width:180px;margin-bottom:20px;">', unsafe_allow_html=True)
     st.header("1. POJAZD")
-    v_type = st.selectbox("WYBIERZ TYP:", list(VEHICLES.keys()))
+    v_type = st.selectbox("TYP FLOTY:", list(VEHICLES.keys()))
     veh = VEHICLES[v_type]
+    
     st.divider()
-    t1, t2 = st.tabs(["Z BAZY", "WŁASNY"])
+    
+    st.header("2. DODAJ ŁADUNEK")
+    t1, t2 = st.tabs(["BAZA", "WŁASNY"])
     with t1:
-        sel = st.selectbox("PRODUKT:", [p['name'] for p in prods], index=None)
+        sel = st.selectbox("PRODUKT:", [p['name'] for p in prods_base], index=None)
         qty = st.number_input("SZTUK:", min_value=1, value=1, key="db_qty")
-        if st.button("DODAJ") and sel:
-            p_d = next(p for p in prods if p['name'] == sel)
-            ex = next((i for i in st.session_state.cargo if i['name'] == sel), None)
-            if ex: ex['total_qty'] += qty
-            else: st.session_state.cargo.append({"name": sel, "total_qty": qty, **p_d})
-            st.rerun()
+        if st.button("DODAJ PRODUKT"):
+            if sel:
+                p_d = next(p for p in prods_base if p['name'] == sel)
+                ex = next((i for i in st.session_state.cargo if i['name'] == sel), None)
+                if ex: ex['total_qty'] += qty
+                else: st.session_state.cargo.append({"name": sel, "total_qty": qty, **p_d})
+                st.rerun()
     with t2:
         c_n = st.text_input("NAZWA:")
         c_l = st.number_input("DŁ [cm]:", 120); c_w = st.number_input("SZER [cm]:", 80); c_h = st.number_input("WYS [cm]:", 100)
@@ -198,12 +219,14 @@ with st.sidebar:
         if st.button("DODAJ NIESTANDARDOWY") and c_n:
             st.session_state.cargo.append({"name": c_n, "length": c_l, "width": c_w, "height": c_h, "weight": c_wg, "total_qty": c_qt, "canStack": False, "itemsPerCase": 1})
             st.session_state.colors[c_n] = "#D4A373"; st.rerun()
+            
     if st.button("RESTART SYSTEMU"): st.session_state.cargo = []; st.rerun()
 
 st.title("VORTEZA STACK")
 
 if st.session_state.cargo:
     st.markdown('<div class="vorteza-card">', unsafe_allow_html=True)
+    st.subheader("MANIFEST")
     df = pd.DataFrame(st.session_state.cargo)[['name', 'total_qty']]
     ed_df = st.data_editor(df, disabled=["name"], hide_index=True, use_container_width=True)
     if not ed_df.equals(df):
@@ -211,30 +234,39 @@ if st.session_state.cargo:
         st.session_state.cargo = [i for i in st.session_state.cargo if i['total_qty'] > 0]; st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Przygotowanie skrzyń do algorytmu
     cases = []
     for e in st.session_state.cargo:
         for _ in range(math.ceil(e['total_qty'] / e.get('itemsPerCase', 1))): cases.append(e.copy())
     
     fleet = pack_logic(cases, veh)
     for i, res in enumerate(fleet):
-        with st.expander(f"🚛 POJAZD #{i+1} | {res['weight']} kg", expanded=True):
+        with st.expander(f"🚛 POJAZD #{i+1} - ANALIZA ZAŁADUNKU", expanded=True):
             c1, c2 = st.columns([2.2, 1])
             with c1: st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.colors), use_container_width=True)
             with c2:
-                # ANALIZA
+                # OBLICZENIA
                 a_used = sum(s['l']*s['w'] for s in res['stacks'])
                 a_total = veh['l'] * veh['w']
                 v_used = sum(it['length']*it['width']*it['height'] for s in res['stacks'] for it in s['items'])
+                v_total = veh['l'] * veh['w'] * veh['h']
                 ldm = round(max([s['x'] + s['l'] for s in res['stacks']]) / 100, 2) if res['stacks'] else 0
                 
-                st.markdown("### ANALIZA")
-                st.metric("LDM (Metry bieżące)", f"{ldm} m")
-                st.metric("EP (Miejsca)", f"{round(a_used/9600, 1)} / {veh['pallets']}")
+                st.markdown("### STATYSTYKI")
+                st.metric("METRY BIEŻĄCE (LDM)", f"{ldm} m")
+                st.metric("ZAJĘTE EP", f"{round(a_used/9600, 1)} / {veh['pallets']}")
+                
                 st.write(f"**POWIERZCHNIA:** {round(a_used/10000, 2)} m² ({round(a_used/a_total*100, 1)}%)")
                 st.progress(min(a_used/a_total, 1.0))
-                st.write(f"**OBJĘTOŚĆ:** {round(v_used/1000000, 2)} m³")
+                
+                st.write(f"**OBJĘTOŚĆ:** {round(v_used/1000000, 2)} m³ ({round(v_used/v_total*100, 1)}%)")
+                st.progress(min(v_used/v_total, 1.0))
+                
                 st.write(f"**WAGA:** {res['weight']} / {veh['weight']} kg")
                 st.progress(min(res['weight']/veh['weight'], 1.0))
+                
                 st.markdown("---")
-                st.write("**SKŁAD POJAZDU:**")
+                st.write("**SKŁAD JEDNOSTKOWY:**")
                 st.table(pd.Series([it['name'] for s in res['stacks'] for it in s['items']]).value_counts().reset_index().rename(columns={"index": "PRODUKT", 0: "SZT"}))
+else:
+    st.info("System VORTEZA STACK gotowy do pracy. Dodaj ładunek w panelu bocznym.")
