@@ -4,167 +4,344 @@ import plotly.graph_objects as go
 import json
 import os
 import math
-from dataclasses import dataclass
+from datetime import datetime
 
-# --- ZAAWANSOWANA KONFIGURACJA UI ---
-st.set_page_config(page_title="VORTEZA STACK ENGINE PRO", layout="wide")
+# ==========================================
+# 1. CORE CONFIGURATION & STYLING
+# ==========================================
+st.set_page_config(
+    page_title="VORTEZA STACK PRO | Professional Logistics Suite",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-def apply_industrial_theme():
+def inject_enterprise_css():
     st.markdown("""
         <style>
-        .stApp { background-color: #050505; background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png"); color: #e0e0e0; }
-        [data-testid="stSidebar"] { background-color: #0a0a0a !important; border-right: 2px solid #d2a679; }
-        .metric-box { background: rgba(20, 20, 20, 0.9); border-left: 5px solid #d2a679; padding: 20px; border-radius: 4px; margin: 10px 0; }
-        .stMetricValue { color: #d2a679 !important; font-family: 'Courier New', monospace !important; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono&display=swap');
+        
+        .stApp {
+            background-color: #080808;
+            background-image: radial-gradient(#1a1a1a 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #ececec;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        [data-testid="stSidebar"] {
+            background-color: #0c0c0c !important;
+            border-right: 1px solid #2d2d2d;
+            padding-top: 2rem;
+        }
+        
+        .metric-card {
+            background: linear-gradient(145deg, #111111, #161616);
+            border: 1px solid #2d2d2d;
+            border-left: 4px solid #d2a679;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            margin-bottom: 15px;
+        }
+        
+        .metric-label {
+            color: #888;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            color: #d2a679;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .stButton>button {
+            width: 100%;
+            border-radius: 4px;
+            background-color: transparent;
+            border: 1px solid #d2a679;
+            color: #d2a679;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 0.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .stButton>button:hover {
+            background-color: #d2a679;
+            color: #000;
+            box-shadow: 0 0 15px rgba(210, 166, 121, 0.4);
+        }
+
+        /* Tabela danych */
+        .stDataFrame {
+            border: 1px solid #2d2d2d;
+            border-radius: 8px;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-# --- MODEL DANYCH ---
-@dataclass
-class Product:
-    name: str
-    w: float
-    l: float
-    h: float
-    weight: float
-    can_stack: bool
-    qty: int
-    ipc: int # items per case (np. 1 paleta)
+# ==========================================
+# 2. LOGISTICS ENGINE (THE "BRAIN")
+# ==========================================
+class CargoPacker:
+    def __init__(self, width, length, height):
+        self.vw = width
+        self.vl = length
+        self.vh = height
+        self.reset()
 
-# --- SILNIK OPTYMALIZACJI (Wersja High-Performance) ---
-class VorterzaLogic:
-    def __init__(self, vw, vl, vh):
-        self.vw, self.vl, self.vh = vw, vl, vh
+    def reset(self):
+        self.packed_items = []
+        self.current_ldm = 0
+        self.total_weight = 0
 
-    def calculate_loading(self, items):
-        # 1. Przygotowanie jednostek wysyłkowych
-        to_pack = []
-        for it in items:
-            units = math.ceil(it.qty / it.ipc)
-            for _ in range(units):
-                to_pack.append({'name': it.name, 'w': it.w, 'l': it.l, 'h': it.h, 'stackable': it.can_stack})
+    def pack(self, manifest):
+        """
+        Główny algorytm pakowania rzędowego z obsługą side-fillingu 
+        oraz poprawnego fizycznego piętrowania.
+        """
+        self.reset()
+        # Rozbicie na pojedyncze jednostki transportowe (boxy/palety)
+        queue = []
+        for item in manifest:
+            count = math.ceil(item['qty'] / item['itemsPerCase'])
+            for _ in range(count):
+                queue.append({
+                    'name': item['name'],
+                    'w': item['width'],
+                    'l': item['length'],
+                    'h': item['height'],
+                    'weight': item['weight'],
+                    'stack': item['canStack']
+                })
 
-        # 2. Sortowanie: Najpierw te, które zajmują najwięcej podłogi
-        to_pack.sort(key=lambda x: (x['w'] * x['l']), reverse=True)
+        # Sortowanie: Powierzchnia podstawy DESC
+        queue.sort(key=lambda x: (x['w'] * x['l']), reverse=True)
         
-        packed = []
-        current_y = 0.0
+        y_cursor = 0.0
         
-        while to_pack:
-            leader = to_pack.pop(0)
-            lw, ll, lh = leader['w'], leader['l'], leader['h']
+        while queue:
+            # Pobierz lidera rzędu
+            leader = queue.pop(0)
+            lw, ll = leader['w'], leader['l']
             
-            # Rotacja dla oszczędności LDM
-            if lw < ll and ll <= self.vw: lw, ll = ll, lw
+            # Rotacja lidera
+            if lw < ll and ll <= self.vw:
+                lw, ll = ll, lw
+                
+            # Ile sztuk TEGO SAMEGO typu wejdzie w stos w tym miejscu?
+            max_s = math.floor(self.vh / leader['h']) if leader['stack'] else 1
+            current_s = 1
             
-            # OBLICZANIE PIĘTROWANIA (Tu rozwiązujemy problem Twoich TV)
-            # Jeśli can_stack=True, sprawdzamy ile wejdzie do wysokości naczepy (np. 265cm)
-            stack_height = math.floor(self.vh / lh) if leader['stackable'] else 1
-            # Jeśli mamy więcej takich samych przedmiotów, "zużywamy" je do stosu
-            actual_stack = 1
-            for _ in range(stack_height - 1):
-                for i, shadow in enumerate(to_pack):
-                    if shadow['name'] == leader['name']:
-                        to_pack.pop(i)
-                        actual_stack += 1
-                        break
+            # Szukamy identycznych sztuk do stosu
+            i = 0
+            while i < len(queue) and current_s < max_s:
+                if queue[i]['name'] == leader['name']:
+                    queue.pop(i)
+                    current_s += 1
+                else:
+                    i += 1
             
-            packed.append({
-                'name': leader['name'], 'x': 0, 'y': current_y, 'z': 0,
-                'w': lw, 'l': ll, 'h': lh * actual_stack, 'stacked': actual_stack
-            })
+            # Dodaj lidera (stos) do listy
+            # Rozbijamy na poszczególne boxy dla wizualizacji (widoczne linie podziału)
+            for s_idx in range(current_s):
+                self.packed_items.append({
+                    'name': leader['name'],
+                    'x': 0, 'y': y_cursor, 'z': s_idx * leader['h'],
+                    'w': lw, 'l': ll, 'h': leader['h'],
+                    'color': '#d2a679'
+                })
             
-            # SIDE-FILLING (Wypełnianie luki obok stosu)
-            rem_w = self.vw - lw
-            if rem_w > 20: # jeśli zostało więcej niż 20cm
-                idx = 0
-                while idx < len(to_pack):
-                    c = to_pack[idx]
-                    cw, cl, ch = c['w'], c['l'], c['h']
-                    # Próba dopasowania
-                    fit = False
-                    if cw <= rem_w and cl <= ll: fit = True
-                    elif cl <= rem_w and cw <= ll: cw, cl = cl, cw; fit = True
+            # SIDE-FILLING (Wypełnianie luki obok lidera w tym samym rzędzie)
+            x_cursor = lw
+            row_l = ll
+            
+            j = 0
+            while j < len(queue):
+                cand = queue[j]
+                cw, cl = cand['w'], cand['l']
+                
+                # Próba dopasowania (z rotacją)
+                fit = False
+                if x_cursor + cw <= self.vw and cl <= row_l:
+                    fit = True
+                elif x_cursor + cl <= self.vw and cw <= row_l:
+                    cw, cl = cl, cw
+                    fit = True
+                
+                if fit:
+                    max_cs = math.floor(self.vh / cand['h']) if cand['stack'] else 1
+                    current_cs = 1
+                    queue.pop(j) # zabierz lidera bocznego
                     
-                    if fit:
-                        c_stack_limit = math.floor(self.vh / ch) if c['stackable'] else 1
-                        c_actual_stack = 1
-                        to_pack.pop(idx) # zabieramy lidera bocznego
-                        # Dopychamy stos boczny
-                        for _ in range(c_stack_limit - 1):
-                            for j, shadow in enumerate(to_pack):
-                                if shadow['name'] == c['name']:
-                                    to_pack.pop(j)
-                                    c_actual_stack += 1
-                                    break
-                        
-                        packed.append({
-                            'name': c['name'], 'x': self.vw - rem_w, 'y': current_y, 'z': 0,
-                            'w': cw, 'l': cl, 'h': ch * c_actual_stack, 'stacked': c_actual_stack
+                    # Dopełnij stos boczny
+                    k = 0
+                    while k < len(queue) and current_cs < max_cs:
+                        if queue[k]['name'] == cand['name']:
+                            queue.pop(k)
+                            current_cs += 1
+                        else:
+                            k += 1
+                            
+                    for cs_idx in range(current_cs):
+                        self.packed_items.append({
+                            'name': cand['name'],
+                            'x': x_cursor, 'y': y_cursor, 'z': cs_idx * cand['h'],
+                            'w': cw, 'l': cl, 'h': cand['h'],
+                            'color': '#a88664'
                         })
-                        rem_w -= cw
-                    else:
-                        idx += 1
+                    x_cursor += cw
+                else:
+                    j += 1
             
-            current_y += ll
+            y_cursor += row_l
+            self.total_weight += (current_s * leader['weight']) # uproszczone dla przykładu
             
-        return packed, current_y
+        self.current_ldm = y_cursor
+        return self.packed_items, self.current_ldm
 
-# --- INTERFEJS ---
-def main():
-    apply_industrial_theme()
-    st.title("VORTEZA | STACK ANALYZER v3.1")
+# ==========================================
+# 3. 3D RENDER ENGINE (PLOTLY)
+# ==========================================
+def draw_truck_3d(items, vw, vl, vh):
+    fig = go.Figure()
     
-    if 'cargo' not in st.session_state: st.session_state.cargo = []
+    # Naczepa (Kontur/Szkielet)
+    fig.add_trace(go.Mesh3d(
+        x=[0, vw, vw, 0, 0, vw, vw, 0],
+        y=[0, 0, vl, vl, 0, 0, vl, vl],
+        z=[0, 0, 0, 0, vh, vh, vh, vh],
+        i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+        j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+        k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+        opacity=0.03, color='#ffffff', showlegend=False
+    ))
 
+    # Renderowanie każdego boxu z osobna (dla widocznych linii podziału)
+    for it in items:
+        x, y, z = it['x'], it['y'], it['z']
+        w, l, h = it['w'], it['l'], it['h']
+        
+        fig.add_trace(go.Mesh3d(
+            x=[x, x+w, x+w, x, x, x+w, x+w, x],
+            y=[y, y, y+l, y+l, y, y, y+l, y+l],
+            z=[z, z, z, z, z+h, z+h, z+h, z+h],
+            i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+            j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+            k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+            color=it['color'], opacity=0.9, flatshading=True,
+            name=it['name'], hoverinfo="name"
+        ))
+
+    fig.update_layout(
+        scene=dict(
+            aspectmode='data',
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            zaxis=dict(visible=False),
+            bgcolor='black'
+        ),
+        paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=0, r=0, b=0, t=0),
+        height=750
+    )
+    return fig
+
+# ==========================================
+# 4. MAIN INTERFACE
+# ==========================================
+def main():
+    inject_enterprise_css()
+    
+    # State Management
+    if 'manifest' not in st.session_state:
+        st.session_state.manifest = []
+
+    # SIDEBAR: Kontrola wejścia
     with st.sidebar:
-        st.header("PARAMETRY NACZEPY")
-        v_type = st.selectbox("TYP:", ["FTL 13.6m", "Solo 8m", "Bus"])
-        dims = {"FTL 13.6m": (245, 1360, 265), "Solo 8m": (245, 800, 250), "Bus": (170, 400, 180)}
-        vw, vl, vh = dims[v_type]
+        st.markdown("<h1 style='color:#d2a679;'>VORTEZA STACK</h1>", unsafe_allow_html=True)
+        st.markdown(f"**DATE:** {datetime.now().strftime('%Y-%m-%d')}")
+        st.markdown("---")
         
-        st.header("DODAJ TOWAR")
-        with st.expander("KREATOR PRODUKTU"):
-            name = st.text_input("Nazwa", "TV 55 CALI")
-            c1, c2 = st.columns(2)
-            w = c1.number_input("Szer [cm]", value=120)
-            l = c2.number_input("Dł [cm]", value=80)
-            h = c1.number_input("Wys [cm]", value=110)
-            qty = st.number_input("Ilość sztuk", value=50)
-            ipc = st.number_input("Sztuk na palecie", value=1)
-            stack = st.checkbox("Można piętrować?", value=True)
-            if st.button("DODAJ DO PLANU"):
-                st.session_state.cargo.append(Product(name, w, l, h, 40, stack, qty, ipc))
+        st.subheader("⚙️ KONFIGURACJA POJAZDU")
+        v_choice = st.selectbox("Typ naczepy:", ["Standard FTL (13.6m)", "Solo (8.5m)", "Van (4.5m)"])
+        v_data = {"Standard FTL (13.6m)": (245, 1360, 265), "Solo (8.5m)": (245, 850, 250), "Van (4.5m)": (180, 450, 190)}
+        v_w, v_l, v_h = v_data[v_choice]
+        
+        st.markdown("---")
+        st.subheader("📦 DODAJ ŁADUNEK")
+        
+        # Szybkie dodawanie TV 55" jako test
+        if st.button("DODAJ 50szt. TV 55\" (TEST)"):
+            st.session_state.manifest.append({
+                "name": "TV 55 CALI", "width": 140, "length": 20, "height": 85, 
+                "weight": 25, "canStack": True, "itemsPerCase": 1, "qty": 50
+            })
+            st.rerun()
 
-        if st.button("RESET"): st.session_state.cargo = []; st.rerun()
+        with st.expander("FORMULARZ RĘCZNY"):
+            name = st.text_input("Nazwa produktu", "Paleta EURO")
+            col1, col2 = st.columns(2)
+            pw = col1.number_input("Szerokość [cm]", value=80)
+            pl = col2.number_input("Długość [cm]", value=120)
+            ph = col1.number_input("Wysokość [cm]", value=150)
+            pweight = col2.number_input("Waga [kg]", value=450)
+            pqty = st.number_input("Sztuk łącznie", value=1)
+            pstack = st.checkbox("Można piętrować?", value=True)
+            
+            if st.button("DODAJ DO LISTY"):
+                st.session_state.manifest.append({
+                    "name": name, "width": pw, "length": pl, "height": ph, 
+                    "weight": pweight, "canStack": pstack, "itemsPerCase": 1, "qty": pqty
+                })
+                st.rerun()
 
-    if st.session_state.cargo:
-        logic = VorterzaLogic(vw, vl, vh)
-        packed, ldm = logic.calculate_loading(st.session_state.cargo)
-        
-        # WIDOK STATYSTYK
-        m1, m2, m3 = st.columns(3)
-        with m1: st.markdown(f"<div class='metric-box'><small>LDM</small><br><span class='metric-value'>{round(ldm/100, 2)} m</span></div>", unsafe_allow_html=True)
-        with m2: st.markdown(f"<div class='metric-box'><small>WYKORZYSTANIE PODŁOGI</small><br><span class='metric-value'>{round((ldm/vl)*100, 1)}%</span></div>", unsafe_allow_html=True)
-        with m3: st.markdown(f"<div class='metric-box'><small>OBJĘTOŚĆ</small><br><span class='metric-value'>{len(packed)} STOSÓW</span></div>", unsafe_allow_html=True)
+        if st.button("🗑️ WYCZYŚĆ LISTĘ"):
+            st.session_state.manifest = []
+            st.rerun()
 
-        # WIZUALIZACJA 3D
-        fig = go.Figure()
-        # Naczepa
-        fig.add_trace(go.Mesh3d(x=[0,vw,vw,0,0,vw,vw,0], y=[0,0,ldm,ldm,0,0,ldm,ldm], z=[0,0,0,0,vh,vh,vh,vh], opacity=0.05, color='white'))
-        # Towary
-        for b in packed:
-            x,y,z,bw,bl,bh = b['x'], b['y'], b['z'], b['w'], b['l'], b['h']
-            fig.add_trace(go.Mesh3d(x=[x,x+bw,x+bw,x,x,x+bw,x+bw,x], y=[y,y,y+bl,y+bl,y,y,y+bl,y+bl], z=[z,z,z,z,z+bh,z+bh,z+bh,z+bh], 
-                                   color='#d2a679', opacity=0.9, flatshading=True, name=b['name'],
-                                   text=f"{b['name']} | Stos: x{b['stacked']}", hoverinfo="text"))
+    # MAIN AREA
+    if st.session_state.manifest:
+        packer = CargoPacker(v_w, v_l, v_h)
+        packed_items, ldm_total = packer.pack(st.session_state.manifest)
         
-        fig.update_layout(scene=dict(aspectmode='data', bgcolor='black', xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False)),
-                          paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,b=0,t=0), height=600)
-        st.plotly_chart(fig, use_container_width=True)
+        # Nagłówek statystyk
+        c1, c2, c3, c4 = st.columns(4)
         
-        st.table(pd.DataFrame([vars(p) for p in st.session_state.cargo]))
+        with c1:
+            st.markdown(f"""<div class='metric-card'><div class='metric-label'>Łączny LDM</div>
+                        <div class='metric-value'>{round(ldm_total/100, 2)}m</div></div>""", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""<div class='metric-card'><div class='metric-label'>Euro Palety (szac.)</div>
+                        <div class='metric-value'>{round((ldm_total/100)*2.4, 1)}</div></div>""", unsafe_allow_html=True)
+        with c3:
+            total_w = sum(m['weight'] * m['qty'] for m in st.session_state.manifest)
+            st.markdown(f"""<div class='metric-card'><div class='metric-label'>Waga (kg)</div>
+                        <div class='metric-value'>{total_w}</div></div>""", unsafe_allow_html=True)
+        with c4:
+            util = round((ldm_total / v_l) * 100, 1)
+            st.markdown(f"""<div class='metric-card'><div class='metric-label'>Zajętość naczepy</div>
+                        <div class='metric-value'>{util}%</div></div>""", unsafe_allow_html=True)
+
+        # Rendering 3D
+        st.plotly_chart(draw_truck_3d(packed_items, v_w, max(v_l, ldm_total + 100), v_h), use_container_width=True)
+        
+        # Tabela ładunku
+        st.subheader("📋 LISTA ZAŁADUNKOWA")
+        st.dataframe(pd.DataFrame(st.session_state.manifest), use_container_width=True)
+        
     else:
-        st.info("Dodaj towar, aby rozpocząć analizę.")
+        st.markdown("""
+            <div style='text-align: center; padding: 100px;'>
+                <h2 style='color: #444;'>VORTEZA STACK ENGINE IS READY</h2>
+                <p style='color: #666;'>Dodaj produkty w panelu bocznym, aby wyliczyć parametry załadunku.</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
