@@ -5,123 +5,172 @@ import json
 import os
 import math
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
 
-# --- ARCHITEKTURA DANYCH ---
+# ==========================================
+# 1. KONFIGURACJA SYSTEMU I STYLIZACJA UI
+# ==========================================
+st.set_page_config(
+    page_title="VORTEZA STACK PRO v3.0",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+def apply_custom_theme():
+    st.markdown("""
+        <style>
+        /* Główne tło z teksturą Carbon Fibre */
+        .stApp {
+            background-color: #050505;
+            background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png");
+            color: #e0e0e0;
+        }
+        
+        /* Stylizacja Sidebaru */
+        [data-testid="stSidebar"] {
+            background-color: #0a0a0a !important;
+            border-right: 2px solid #d2a679;
+        }
+        
+        /* Customowe Karty Metryk */
+        .metric-container {
+            background: rgba(20, 20, 20, 0.8);
+            border: 1px solid #333;
+            border-left: 5px solid #d2a679;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .metric-label {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metric-value {
+            color: #d2a679;
+            font-size: 28px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: bold;
+        }
+
+        /* Przyciski */
+        .stButton>button {
+            width: 100%;
+            background-color: transparent;
+            border: 1px solid #d2a679;
+            color: #d2a679;
+            transition: 0.3s;
+        }
+        .stButton>button:hover {
+            background-color: #d2a679;
+            color: black;
+        }
+        
+        /* Tabela */
+        .styled-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #0f0f0f;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# ==========================================
+# 2. SILNIK LOGISTYCZNY (BACKEND)
+# ==========================================
 @dataclass
-class Box:
+class CargoItem:
     name: str
-    w: float
-    l: float
-    h: float
+    width: float
+    length: float
+    height: float
     weight: float
     can_stack: bool
-    qty: int
+    qty_total: int
     items_per_case: int
-    id: Optional[int] = None
 
-class VortezaPacker:
-    """Zaawansowany silnik pakowania 3D z logiką side-filling i stacking optimization."""
-    
-    def __init__(self, vehicle_w: float, vehicle_l: float, vehicle_h: float):
-        self.v_w = vehicle_w
-        self.v_l = vehicle_l
-        self.v_h = vehicle_h
-        self.packed_items = []
-        self.current_ldm = 0.0
+class PackingEngine:
+    def __init__(self, v_w, v_l, v_h):
+        self.v_w = v_w
+        self.v_l = v_l
+        self.v_h = v_h
 
-    def pack(self, boxes: List[Box]) -> Tuple[List[Dict], float]:
-        # 1. Rozbicie na jednostki wysyłkowe (cases)
-        to_pack = []
-        for b in boxes:
-            num_cases = math.ceil(b.qty / b.items_per_case)
-            for _ in range(num_cases):
-                to_pack.append({
-                    'name': b.name, 'w': b.w, 'l': b.l, 'h': b.h,
-                    'weight': b.weight, 'can_stack': b.can_stack
+    def execute_packing(self, manifest: list):
+        # Rozbicie na fizyczne jednostki (skrzynie)
+        physical_boxes = []
+        for item in manifest:
+            num_boxes = math.ceil(item.qty_total / item.items_per_case)
+            for _ in range(num_boxes):
+                physical_boxes.append({
+                    'name': item.name, 'w': item.width, 'l': item.length,
+                    'h': item.height, 'weight': item.weight, 'stackable': item.can_stack
                 })
 
-        # 2. Sortowanie heurystyczne (Area & Height)
-        to_pack.sort(key=lambda x: (x['w'] * x['l'], x['h']), reverse=True)
+        # Sortowanie: Najpierw największa podstawa (Area)
+        physical_boxes.sort(key=lambda x: (x['w'] * x['l']), reverse=True)
         
-        y_offset = 0.0
+        packed_structure = []
+        current_y = 0.0
+        to_pack = physical_boxes.copy()
+
         while to_pack:
             # Wybór lidera rzędu
             leader = to_pack.pop(0)
-            lw, ll, lh = self._orient_item(leader['w'], leader['l'], self.v_w)
+            lw, ll = leader['w'], leader['l']
             
-            # Obliczanie stackingu dla lidera
-            l_stack = math.floor(self.v_h / lh) if leader['can_stack'] else 1
+            # Autootacja dla optymalizacji szerokości
+            if lw < ll and ll <= self.v_w:
+                lw, ll = ll, lw
             
-            # Dodanie kolumny lidera
-            self.packed_items.append({
-                'name': leader['name'], 'x': 0, 'y': y_offset, 'z': 0,
-                'w': lw, 'l': ll, 'h': lh * l_stack, 'count': l_stack
+            # Obliczanie pionowego stosu (Stacking)
+            max_stack = math.floor(self.v_h / leader['h']) if leader['stackable'] else 1
+            
+            packed_structure.append({
+                'name': leader['name'], 'x': 0, 'y': current_y, 'z': 0,
+                'w': lw, 'l': ll, 'h': leader['h'] * max_stack, 'is_stack': max_stack > 1
             })
             
-            current_x = lw
-            row_l = ll
+            filled_width = lw
+            max_row_length = ll
             
-            # 3. SIDE-FILLING: Wypełnianie szerokości rzędu
+            # SIDE-FILLING: Szukanie mniejszych elementów do tego samego rzędu
             idx = 0
-            while idx < len(to_pack) and current_x < self.v_w:
-                sub = to_pack[idx]
-                sw, sl, sh = self._orient_item(sub['w'], sub['l'], self.v_w - current_x)
+            while idx < len(to_pack):
+                candidate = to_pack[idx]
+                cw, cl = candidate['w'], candidate['l']
                 
-                # Sprawdzenie czy pasuje w głąb rzędu (row_l)
-                if sw <= (self.v_w - current_x) and sl <= row_l:
-                    s_stack = math.floor(self.v_h / sh) if sub['can_stack'] else 1
-                    self.packed_items.append({
-                        'name': sub['name'], 'x': current_x, 'y': y_offset, 'z': 0,
-                        'w': sw, 'l': sl, 'h': sh * s_stack, 'count': s_stack
+                # Próba dopasowania w pozostałej szerokości
+                can_fit = False
+                if filled_width + cw <= self.v_w and cl <= max_row_length:
+                    can_fit = True
+                elif filled_width + cl <= self.v_w and cw <= max_row_length:
+                    cw, cl = cl, cw
+                    can_fit = True
+                
+                if can_fit:
+                    c_stack = math.floor(self.v_h / candidate['h']) if candidate['stackable'] else 1
+                    packed_structure.append({
+                        'name': candidate['name'], 'x': filled_width, 'y': current_y, 'z': 0,
+                        'w': cw, 'l': cl, 'h': candidate['h'] * c_stack, 'is_stack': c_stack > 1
                     })
-                    current_x += sw
+                    filled_width += cw
                     to_pack.pop(idx)
                 else:
                     idx += 1
             
-            y_offset += row_l
-            
-        self.current_ldm = y_offset
-        return self.packed_items, self.current_ldm
+            current_y += max_row_length
 
-    def _orient_item(self, w: float, l: float, max_w: float) -> Tuple[float, float, float]:
-        """Logika rotacji: zawsze staraj się ustawić szerszym bokiem do frontu naczepy."""
-        if w < l and l <= max_w:
-            return l, w
-        return w, l
+        return packed_structure, current_y
 
-# --- INTERFEJS UŻYTKOWNIKA ---
-
-def set_vorteza_style():
-    st.markdown("""
-        <style>
-        .stApp {
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-            background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png");
-            color: #e0e0e0;
-        }
-        [data-testid="stSidebar"] {
-            background-color: rgba(0,0,0,0.9) !important;
-            border-right: 1px solid #d2a67933;
-        }
-        .metric-card {
-            background: rgba(255,255,255,0.03);
-            border-left: 3px solid #d2a679;
-            padding: 20px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-        .stMetricValue { font-family: 'IBM Plex Mono', monospace !important; color: #d2a679 !important; }
-        h1, h2, h3 { font-family: 'Orbitron', sans-serif; text-transform: uppercase; }
-        </style>
-    """, unsafe_allow_html=True)
-
-def render_vorteza_3d(items, v_w, v_l, v_h):
+# ==========================================
+# 3. WIZUALIZACJA 3D (RENDERER)
+# ==========================================
+def create_vorteza_visual(packed_data, v_w, v_l, v_h):
     fig = go.Figure()
 
-    # Naczepa (Wireframe)
+    # Naczepa (Kontur)
     fig.add_trace(go.Mesh3d(
         x=[0, v_w, v_w, 0, 0, v_w, v_w, 0],
         y=[0, 0, v_l, v_l, 0, 0, v_l, v_l],
@@ -129,14 +178,14 @@ def render_vorteza_3d(items, v_w, v_l, v_h):
         i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
         j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
         k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-        opacity=0.02, color='white', hoverinfo='none'
+        opacity=0.05, color='white', hoverinfo='none'
     ))
 
-    # Skrzynie (Zoptymalizowane rysowanie kolumn)
-    for i in items:
-        x, y, z, w, l, h = i['x'], i['y'], i['z'], i['w'], i['l'], i['h']
+    # Ładunek
+    for b in packed_data:
+        x, y, z, w, l, h = b['x'], b['y'], b['z'], b['w'], b['l'], b['h']
+        color = '#d2a679' if b['is_stack'] else '#a88664'
         
-        # Generowanie prostopadłościanu
         fig.add_trace(go.Mesh3d(
             x=[x, x+w, x+w, x, x, x+w, x+w, x],
             y=[y, y, y+l, y+l, y, y, y+l, y+l],
@@ -144,122 +193,113 @@ def render_vorteza_3d(items, v_w, v_l, v_h):
             i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
             j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
             k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color='#d2a679' if i['count'] > 1 else '#a88664',
-            opacity=0.85,
-            flatshading=True,
-            name=i['name'],
-            text=f"PRODUKT: {i['name']}<br>LDM POSITION: {round(y/100,2)}m<br>STACKED: x{i['count']}",
-            hoverinfo="text"
+            color=color, opacity=0.9, flatshading=True,
+            name=b['name'], text=f"PRODUKT: {b['name']}", hoverinfo="text"
         ))
 
     fig.update_layout(
         scene=dict(
             aspectmode='data',
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
-            zaxis=dict(visible=False),
-            camera=dict(eye=dict(x=1.5, y=-1.5, z=1.2))
+            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+            bgcolor='black'
         ),
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=0, r=0, b=0, t=0),
-        height=700,
-        showlegend=False
+        paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, b=0, t=0), height=700
     )
     return fig
 
-# --- GŁÓWNA LOGIKA APLIKACJI ---
-
+# ==========================================
+# 4. APLIKACJA GŁÓWNA (FRONTEND)
+# ==========================================
 def main():
-    set_vorteza_style()
+    apply_custom_theme()
     
-    # Inicjalizacja stanu
-    if 'cargo_manifest' not in st.session_state:
-        st.session_state.cargo_manifest = []
+    if 'manifest' not in st.session_state:
+        st.session_state.manifest = []
 
-    # SIDEBAR: LOGO I STEROWANIE
+    # SIDEBAR
     with st.sidebar:
-        # Prawdziwe logo Vorteza (SVG lub Text stylizowany)
-        st.markdown("<h1 style='color:#d2a679; border-bottom: 2px solid #d2a679;'>VORTEZA SYSTEM</h1>", unsafe_allow_html=True)
-        st.write("Professional Packing Intelligence")
+        st.markdown("<h1 style='text-align:center; color:#d2a679;'>VORTEZA STACK</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; font-size:10px;'>PRECISION LOADING ENGINE v3.0</p>", unsafe_allow_html=True)
+        st.markdown("---")
         
-        st.header("1. KONFIGURACJA POJAZDU")
-        v_type = st.selectbox("TYP POJAZDU:", ["Standard FTL (13.6m)", "Solo (8.0m)", "Jumbo (15.0m)"])
-        v_map = {"Standard FTL (13.6m)": (245, 1360, 265), "Solo (8.0m)": (245, 800, 250), "Jumbo (15.0m)": (245, 1500, 300)}
-        v_w, v_l, v_h = v_map[v_type]
+        st.header("POJAZD")
+        v_type = st.selectbox("MODEL:", ["Standard 13.6m", "Solo 8.0m", "Delivery Bus"])
+        v_dims = {"Standard 13.6m": (245, 1360, 265), "Solo 8.0m": (245, 800, 250), "Delivery Bus": (170, 400, 180)}
+        v_w, v_l, v_h = v_dims[v_type]
         
-        st.header("2. KREATOR ŁADUNKU")
-        tab_db, tab_manual = st.tabs(["DATABASE", "MANUAL ENTRY"])
+        st.header("ŁADUNEK")
+        tab1, tab2 = st.tabs(["BAZA", "RĘCZNIE"])
         
-        with tab_db:
+        with tab1:
             if os.path.exists("products.json"):
                 with open("products.json", "r", encoding="utf-8") as f:
                     db = json.load(f)
-                p_names = [p['name'] for p in db]
-                sel = st.selectbox("WYBIERZ Z BAZY:", p_names)
-                qty = st.number_input("ILOŚĆ SZTUK:", min_value=1, value=1)
-                if st.button("DODAJ DO MANIFESTU"):
-                    item = next(p for p in db if p['name'] == sel)
-                    st.session_state.cargo_manifest.append(Box(**item, qty=qty))
+                selected_prod = st.selectbox("PRODUKT:", [p['name'] for p in db])
+                qty = st.number_input("ILOŚĆ:", min_value=1, value=1)
+                if st.button("DODAJ PRODUKT"):
+                    p = next(x for x in db if x['name'] == selected_prod)
+                    st.session_state.manifest.append(CargoItem(
+                        p['name'], p['width'], p['length'], p['height'], p['weight'], 
+                        p['canStack'], qty, p['itemsPerCase']
+                    ))
             else:
-                st.error("DATABASE NOT FOUND (products.json)")
+                st.error("Brak pliku products.json")
 
-        with tab_manual:
-            m_name = st.text_input("NAZWA ELEMENTU:", "Custom Case")
+        with tab2:
+            n = st.text_input("NAZWA:", "Box")
             c1, c2 = st.columns(2)
-            m_w = c1.number_input("SZER [cm]", value=60)
-            m_l = c2.number_input("DŁ [cm]", value=40)
-            m_h = c1.number_input("WYS [cm]", value=80)
-            m_wg = c2.number_input("WAGA [kg]", value=50)
-            m_ipc = st.number_input("SZTUK W CASE:", value=1)
-            m_stk = st.checkbox("STACKOWALNY?", value=True)
-            if st.button("DODAJ NIESTANDARDOWY"):
-                st.session_state.cargo_manifest.append(Box(m_name, m_w, m_l, m_h, m_wg, m_stk, 1, m_ipc))
+            w = c1.number_input("SZER [cm]", value=80)
+            l = c2.number_input("DŁ [cm]", value=120)
+            h = c1.number_input("WYS [cm]", value=100)
+            stk = st.checkbox("MOŻNA STACKOWAĆ", value=True)
+            if st.button("DODAJ RĘCZNIE"):
+                st.session_state.manifest.append(CargoItem(n, w, l, h, 50, stk, 1, 1))
 
-        if st.button("RESETUJ CAŁY ŁADUNEK"):
-            st.session_state.cargo_manifest = []
+        if st.button("WYCZYŚĆ LISTĘ"):
+            st.session_state.manifest = []
             st.rerun()
 
-    # GŁÓWNY PANEL ANALITYCZNY
-    st.subheader("SYSTEM ANALIZY PRZESTRZENNEJ")
-    
-    if st.session_state.cargo_manifest:
-        # Obliczenia
-        packer = VortezaPacker(v_w, v_l, v_h)
-        packed_items, ldm = packer.pack(st.session_state.cargo_manifest)
+    # PANEL GŁÓWNY
+    if st.session_state.manifest:
+        engine = PackingEngine(v_w, v_l, v_h)
+        packed_data, total_ldm = engine.execute_packing(st.session_state.manifest)
         
-        col_viz, col_metrics = st.columns([0.7, 0.3])
+        # Statystyki po prawej
+        col_main, col_stat = st.columns([0.75, 0.25])
         
-        with col_metrics:
-            st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-            st.metric("METRY BIEŻĄCE (LDM)", f"{round(ldm/100, 2)} m")
-            st.markdown("</div>", unsafe_allow_html=True)
+        with col_stat:
+            st.markdown(f"""
+                <div class="metric-container">
+                    <div class="metric-label">Metry Bieżące (LDM)</div>
+                    <div class="metric-value">{round(total_ldm/100, 2)} m</div>
+                </div>
+                <div class="metric-container">
+                    <div class="metric-label">Euro Palety (est.)</div>
+                    <div class="metric-value">{round((total_ldm/100)*2.4, 1)}</div>
+                </div>
+            """, unsafe_allow_html=True)
             
-            st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-            st.metric("EURO-PALETY (SZAC.)", f"{round((ldm/100)*2.4, 1)} / 33")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Wskaźniki procentowe
-            total_area_m2 = (v_w * v_l) / 10000
-            used_area_m2 = sum((i['w'] * i['l']) / 10000 for i in packed_items)
-            area_p = min(100.0, (used_area_m2 / total_area_m2) * 100)
-            
-            st.write(f"Zajętość powierzchni: {round(area_p, 1)}%")
-            st.progress(area_p / 100)
-            
-            total_weight = sum(b.weight * math.ceil(b.qty/b.items_per_case) for b in st.session_state.cargo_manifest)
-            st.write(f"Waga całkowita: {total_weight} kg")
+            total_weight = sum(m.weight * math.ceil(m.qty_total/m.items_per_case) for m in st.session_state.manifest)
+            st.write(f"Waga całkowita: **{total_weight} kg**")
             st.progress(min(1.0, total_weight / 24000))
+            
+            vol_eff = min(100.0, (total_ldm / v_l) * 100)
+            st.write(f"Zajętość długości: **{round(vol_eff, 1)}%**")
+            st.progress(vol_eff / 100)
 
-        with col_viz:
-            st.plotly_chart(render_vorteza_3d(packed_items, v_w, ldm + 100, v_h), use_container_width=True)
+        with col_main:
+            st.plotly_chart(create_vorteza_visual(packed_data, v_w, total_ldm + 50, v_h), use_container_width=True)
 
-        # TABELA MANIFESTU
-        st.subheader("DOKUMENTACJA ZAŁADUNKOWA")
-        df = pd.DataFrame([vars(b) for b in st.session_state.cargo_manifest])
-        st.dataframe(df[['name', 'qty', 'width', 'length', 'height', 'weight', 'can_stack']], use_container_width=True)
-        
+        # Tabela ładunkowa
+        st.subheader("MANIFEST ZAŁADUNKOWY")
+        df_display = pd.DataFrame([
+            {"Produkt": m.name, "Sztuk": m.qty_total, "Wymiary": f"{m.width}x{m.length}x{m.height}", "Stacking": "TAK" if m.can_stack else "NIE"}
+            for m in st.session_state.manifest
+        ])
+        st.table(df_display)
     else:
-        st.info("OCZEKIWANIE NA DANE ŁADUNKOWE... UŻYJ PANELU BOCZNEGO.")
+        st.markdown("<h2 style='text-align:center; margin-top:100px;'>SYSTEM GOTOWY DO PRACY</h2>", unsafe_allow_html=True)
+        st.info("Wprowadź dane ładunku w panelu bocznym, aby wygenerować plan załadunku 3D.")
 
 if __name__ == "__main__":
     main()
